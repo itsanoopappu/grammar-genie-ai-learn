@@ -51,13 +51,16 @@ export const useExerciseValidation = () => {
       return null;
     }
 
-    // Ensure consistent field naming
+    // Ensure consistent field naming - handle legacy correctAnswer field
+    const content = exercise.content;
+    const correct_answer = content.correct_answer || (content as any).correctAnswer || '';
+
     return {
       ...exercise,
       content: {
-        ...exercise.content,
-        correct_answer: exercise.content.correct_answer || exercise.content.correctAnswer || '',
-        options: exercise.content.options || []
+        ...content,
+        correct_answer,
+        options: content.options || []
       }
     };
   };
