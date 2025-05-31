@@ -7,6 +7,26 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+async function getTopicId(supabaseClient: any, topicName: string): Promise<string | null> {
+  try {
+    const { data, error } = await supabaseClient
+      .from('grammar_topics')
+      .select('id')
+      .eq('name', topicName)
+      .single();
+
+    if (error) {
+      console.error('Error fetching topic ID:', error);
+      return null;
+    }
+
+    return data?.id || null;
+  } catch (error) {
+    console.error('Error in getTopicId:', error);
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -29,14 +49,14 @@ serve(async (req) => {
       const isCorrect = context.userTestAnswer.toLowerCase().trim() === 
                         context.currentQuestion.correctAnswer.toLowerCase().trim();
       
-      // Update user skills if we have user_id
-      if (context.user_id) {
+      // Update user skills if we have user_id and topic ID
+      if (context.user_id && context.currentQuestion.topicId) {
         try {
           await supabaseClient.functions.invoke('intelligent-tutor', {
             body: {
               action: 'update_skill_model',
               user_id: context.user_id,
-              topic_id: context.currentTopic || 'grammar',
+              topic_id: context.currentQuestion.topicId,
               performance_data: {
                 isCorrect,
                 difficulty: 5,
@@ -59,7 +79,7 @@ serve(async (req) => {
           testQuestion: null,
           isTestActive: false,
           progressUpdate: {
-            topicId: context.currentTopic || 'grammar',
+            topicId: context.currentQuestion.topicId,
             isCorrect,
             xpGain: isCorrect ? 10 : 5
           }
@@ -197,8 +217,22 @@ IMPORTANT: When the user asks to test their skills or knowledge, ALWAYS include 
       }
     }
 
+    // If we have a grammar card, get its topic ID
+    if (parsedResponse.grammarCard?.name) {
+      const topicId = await getTopicId(supabaseClient, parsedResponse.grammarCard.name);
+      if (topicId) {
+        parsedResponse.grammarCard.id = topicId;
+        if (parsedResponse.testQuestion) {
+          parsedResponse.testQuestion.topicId = topicId;
+        }
+        if (parsedResponse.progressUpdate) {
+          parsedResponse.progressUpdate.topicId = topicId;
+        }
+      }
+    }
+
     // Update user skills if there's a progress update
-    if (parsedResponse.progressUpdate && context?.user_id) {
+    if (parsedResponse.progressUpdate?.topicId && context?.user_id) {
       try {
         const { data: userSkill } = await supabaseClient
           .from('user_skills')
@@ -223,7 +257,7 @@ IMPORTANT: When the user asks to test their skills or knowledge, ALWAYS include 
             .update(skillUpdate)
             .eq('id', userSkill.id)
         } else {
-          await supabaseClient
+          await supabase
             .from('user_skills')
             .insert(skillUpdate)
         }

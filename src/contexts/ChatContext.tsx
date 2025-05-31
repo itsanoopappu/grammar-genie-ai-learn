@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
 
 interface GrammarTopic {
+  id: string; // UUID of the topic
   name: string;
   level: string;
   description: string;
@@ -24,6 +25,7 @@ interface TestQuestion {
   options?: string[];
   correctAnswer: string;
   explanation: string;
+  topicId?: string; // UUID of the related topic
 }
 
 interface ChatContextType {
@@ -123,19 +125,19 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     // Update user skills if we have a topic
-    if (currentTopic && user) {
+    if (currentTopic && user && currentTopic.id) { // Ensure we have a valid topic ID
       try {
         // Check if skill exists
         const { data: existingSkill } = await supabase
           .from('user_skills')
           .select('*')
           .eq('user_id', user.id)
-          .eq('topic_id', currentTopic.name) // Using name as ID for simplicity
+          .eq('topic_id', currentTopic.id) // Use the UUID instead of name
           .maybeSingle();
 
         const skillUpdate = {
           user_id: user.id,
-          topic_id: currentTopic.name,
+          topic_id: currentTopic.id, // Use the UUID instead of name
           skill_level: existingSkill 
             ? Math.min(1, existingSkill.skill_level + (isCorrect ? 0.1 : -0.05))
             : isCorrect ? 0.6 : 0.4,
