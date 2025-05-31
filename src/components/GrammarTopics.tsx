@@ -8,7 +8,10 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-import { ChevronDown, ChevronRight, BookOpen, Target, MessageCircle, Leaf, Sprout, Trees as Tree } from 'lucide-react';
+import { ChevronDown, ChevronRight, BookOpen, Target, MessageCircle, Leaf, Sprout, Trees as Tree, CheckCircle, Clock } from 'lucide-react';
+import { useUserProgress } from '@/hooks/useUserProgress';
+import { useAtom } from 'jotai';
+import { activeTabAtom, topicToDrillAtom } from '@/hooks/useGlobalUIState';
 
 const grammarStructure = {
   beginner: {
@@ -196,6 +199,41 @@ const grammarStructure = {
 export function GrammarTopics() {
   const [openLevel, setOpenLevel] = useState<string | null>(null);
   const [openSection, setOpenSection] = useState<string | null>(null);
+  const { getTopicMasteryStatus } = useUserProgress();
+  const [_, setActiveTab] = useAtom(activeTabAtom);
+  const [__, setTopicToDrill] = useAtom(topicToDrillAtom);
+
+  const handlePractice = (topic: string) => {
+    setTopicToDrill(topic);
+    setActiveTab('drills');
+  };
+
+  const handleDiscuss = (topic: string) => {
+    setTopicToDrill(topic);
+    setActiveTab('chat');
+  };
+
+  const getMasteryBadge = (topic: string, level: string) => {
+    const status = getTopicMasteryStatus(topic, level);
+    switch (status) {
+      case 'mastered':
+        return (
+          <Badge variant="secondary\" className="bg-green-100 text-green-700">
+            <CheckCircle className="h-3 w-3 mr-1" />
+            Mastered
+          </Badge>
+        );
+      case 'in-progress':
+        return (
+          <Badge variant="secondary" className="bg-yellow-100 text-yellow-700">
+            <Clock className="h-3 w-3 mr-1" />
+            In Progress
+          </Badge>
+        );
+      default:
+        return null;
+    }
+  };
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -251,15 +289,16 @@ export function GrammarTopics() {
                                   key={topic}
                                   className="flex items-center justify-between p-2 rounded-lg hover:bg-accent transition-colors"
                                 >
-                                  <span className="text-sm">{topic}</span>
+                                  <div className="flex items-center space-x-2">
+                                    <span className="text-sm">{topic}</span>
+                                    {getMasteryBadge(topic, level.toUpperCase())}
+                                  </div>
                                   <div className="flex space-x-2">
                                     <Button
                                       size="sm"
                                       variant="ghost"
                                       className="h-7 w-7 p-0"
-                                      onClick={() => {
-                                        document.querySelector('[data-state="inactive"][value="drills"]')?.click();
-                                      }}
+                                      onClick={() => handlePractice(topic)}
                                     >
                                       <Target className="h-4 w-4" />
                                       <span className="sr-only">Practice</span>
@@ -268,9 +307,7 @@ export function GrammarTopics() {
                                       size="sm"
                                       variant="ghost"
                                       className="h-7 w-7 p-0"
-                                      onClick={() => {
-                                        document.querySelector('[data-state="inactive"][value="chat"]')?.click();
-                                      }}
+                                      onClick={() => handleDiscuss(topic)}
                                     >
                                       <MessageCircle className="h-4 w-4" />
                                       <span className="sr-only">Discuss</span>
