@@ -22,7 +22,10 @@ serve(async (req) => {
       correctAnswer, 
       userLevel, 
       weakTopics,
-      concept 
+      concept,
+      count = 5,
+      type = 'practice',
+      excludeTopics = []
     } = await req.json()
 
     // Initialize Supabase client
@@ -61,13 +64,13 @@ serve(async (req) => {
           messages: [
             {
               role: 'system',
-              content: `You are an expert English grammar tutor creating exercises for ${level} level students.
+              content: `You are an expert English grammar tutor creating ${type === 'test' ? 'test questions' : 'exercises'} for ${level} level students.
               Focus on the topic: ${topic}
               ${weakTopics ? `Pay special attention to these weak areas: ${weakTopics.join(', ')}` : ''}`
             },
             {
               role: 'user',
-              content: `Generate 5 grammar exercises in this JSON format:
+              content: `Generate ${count} grammar ${type === 'test' ? 'test questions' : 'exercises'} in this JSON format:
               {
                 "exercises": [
                   {
@@ -107,16 +110,18 @@ serve(async (req) => {
       const aiData = await openAIResponse.json()
       const exercises = JSON.parse(aiData.choices[0].message.content).exercises
 
-      // Store exercises in database
-      await supabaseClient
-        .from('drill_recommendations')
-        .insert({
-          user_id,
-          topic,
-          level,
-          drill_data: exercises,
-          recommended_at: new Date().toISOString()
-        })
+      // Store exercises in database if not a test
+      if (type !== 'test' && user_id) {
+        await supabaseClient
+          .from('drill_recommendations')
+          .insert({
+            user_id,
+            topic,
+            level,
+            drill_data: exercises,
+            recommended_at: new Date().toISOString()
+          })
+      }
 
       return new Response(
         JSON.stringify({ exercises }),
@@ -175,7 +180,7 @@ serve(async (req) => {
     }
 
     if (action === 'personalized-recommendations') {
-      const recommendations = await generatePersonalizedRecommendations(userLevel, weakTopics)
+      const recommendations = await generatePersonalizedRecommendations(userLevel, weakTopics, excludeTopics)
       
       return new Response(
         JSON.stringify({ recommendations }),
@@ -276,7 +281,7 @@ function getNextRecommendation(isCorrect: boolean, topic: string, level: string)
   }
 }
 
-async function generatePersonalizedRecommendations(userLevel: string, weakTopics: string[]) {
+async function generatePersonalizedRecommendations(userLevel: string, weakTopics: string[] = [], excludeTopics: string[] = []) {
   const levelTopics = {
     'A1': ['Present Simple', 'Articles', 'Plural Nouns', 'Basic Prepositions'],
     'A2': ['Past Simple', 'Present Perfect', 'Future Forms', 'Comparatives'],
@@ -290,7 +295,7 @@ async function generatePersonalizedRecommendations(userLevel: string, weakTopics
   // Prioritize weak topics
   if (weakTopics && weakTopics.length > 0) {
     weakTopics.forEach(topic => {
-      if (topics.includes(topic)) {
+      if (topics.includes(topic) && !excludeTopics.includes(topic)) {
         recommendations.push({
           topic,
           priority: 'high',
@@ -303,8 +308,8 @@ async function generatePersonalizedRecommendations(userLevel: string, weakTopics
   }
   
   // Add general level-appropriate topics
-  topics.slice(0, 3).forEach(topic => {
-    if (!recommendations.find(r => r.topic === topic)) {
+  topics.forEach(topic => {
+    if (!recommendations.find(r => r.topic === topic) && !excludeTopics.includes(topic)) {
       recommendations.push({
         topic,
         priority: 'normal',
