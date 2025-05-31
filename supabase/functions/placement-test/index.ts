@@ -26,7 +26,7 @@ serve(async (req) => {
     // Validate environment variables before proceeding
     validateEnv();
 
-    const { action, questions, answers, test_id } = await req.json()
+    const { action, level = 'A2', adaptive = false, user_id, answers, test_id } = await req.json()
 
     // Initialize Supabase client
     const supabaseClient = createClient(
@@ -39,6 +39,8 @@ serve(async (req) => {
       const { data: testData, error: testError } = await supabaseClient
         .from('placement_tests')
         .insert({
+          user_id,
+          test_type: adaptive ? 'adaptive' : 'standard',
           started_at: new Date().toISOString()
         })
         .select()
@@ -62,7 +64,7 @@ serve(async (req) => {
           messages: [
             {
               role: 'system',
-              content: 'You are an expert English grammar assessment system. Generate 10 grammar questions suitable for assessing English proficiency.'
+              content: `You are an expert English grammar assessment system. Generate 10 grammar questions suitable for ${level} level students.`
             },
             {
               role: 'user',
@@ -104,7 +106,8 @@ serve(async (req) => {
             options: q.options,
             correct_answer: q.correct,
             topic: q.topic,
-            explanation: q.explanation
+            explanation: q.explanation,
+            level
           }))
         )
 
@@ -114,13 +117,7 @@ serve(async (req) => {
 
       return new Response(
         JSON.stringify({ 
-          questions: generatedQuestions.map(q => ({
-            id: q.id,
-            question: q.question,
-            options: q.options,
-            topic: q.topic,
-            level: q.level
-          })),
+          questions: generatedQuestions,
           testId
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -128,14 +125,24 @@ serve(async (req) => {
     }
 
     if (action === 'evaluate') {
-      if (!questions || !answers) {
-        throw new Error('Missing required parameters: questions and answers are required');
+      if (!test_id || !answers) {
+        throw new Error('Missing required parameters: test_id and answers are required');
+      }
+
+      // Get test questions
+      const { data: questions, error: questionsError } = await supabaseClient
+        .from('test_questions')
+        .select('*')
+        .eq('test_id', test_id);
+
+      if (questionsError) {
+        throw new Error(`Failed to fetch test questions: ${questionsError.message}`);
       }
 
       // Calculate results
-      const score = Object.values(answers).filter((answer, index) => 
-        answer === questions[index].correct_answer
-      ).length;
+      const score = questions.reduce((acc, q) => {
+        return acc + (answers[q.id] === q.correct_answer ? 1 : 0);
+      }, 0);
       
       const percentage = (score / questions.length) * 100;
       
@@ -146,14 +153,13 @@ serve(async (req) => {
       else if (percentage >= 60) recommendedLevel = 'A2';
 
       // Group questions by topic for analysis
-      const topicResults = questions.reduce((acc, q, index) => {
-        const topic = q.topic;
-        if (!acc[topic]) {
-          acc[topic] = { correct: 0, total: 0 };
+      const topicResults = questions.reduce((acc, q) => {
+        if (!acc[q.topic]) {
+          acc[q.topic] = { correct: 0, total: 0 };
         }
-        acc[topic].total++;
+        acc[q.topic].total++;
         if (answers[q.id] === q.correct_answer) {
-          acc[topic].correct++;
+          acc[q.topic].correct++;
         }
         return acc;
       }, {});
@@ -164,16 +170,30 @@ serve(async (req) => {
       Object.entries(topicResults).forEach(([topic, result]: [string, any]) => {
         const topicScore = (result.correct / result.total) * 100;
         if (topicScore >= 80) {
-          strengths.push(`Strong understanding of ${topic}`);
+          strengths.push(topic);
         } else if (topicScore <= 60) {
-          weaknesses.push(`Need to improve ${topic}`);
+          weaknesses.push(topic);
         }
       });
 
+      // Update test completion
+      const { error: updateError } = await supabaseClient
+        .from('placement_tests')
+        .update({
+          score: percentage,
+          level: recommendedLevel,
+          completed_at: new Date().toISOString()
+        })
+        .eq('id', test_id);
+
+      if (updateError) {
+        throw new Error(`Failed to update test completion: ${updateError.message}`);
+      }
+
       return new Response(
         JSON.stringify({
-          score,
-          level: recommendedLevel,
+          score: percentage,
+          recommendedLevel,
           strengths,
           weaknesses,
           topicsAssessed: Object.keys(topicResults),
