@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,7 +21,6 @@ interface Question {
 interface TestResults {
   score: number;
   total: number;
-  percentage: number;
   recommendedLevel: string;
   topicPerformance: Record<string, { correct: number; total: number }>;
   weakTopics: string[];
@@ -120,9 +118,9 @@ const PlacementTest = () => {
         // Save test results to database
         await supabase.from('placement_tests').insert({
           user_id: user?.id,
-          score: data.percentage,
+          score: data.score,
           level: data.recommendedLevel,
-          test_type: testType,
+          test_type: testType.toUpperCase(),
           completed_at: new Date().toISOString()
         });
 
@@ -279,7 +277,7 @@ const PlacementTest = () => {
                 Level: {testResults.recommendedLevel}
               </div>
               <div className="text-lg text-gray-600 mb-2">
-                Score: {testResults.score}/{testResults.total} ({testResults.percentage.toFixed(1)}%)
+                Score: {testResults.score}/{testResults.total} ({((testResults.score / testResults.total) * 100).toFixed(1)}%)
               </div>
               <div className="text-sm text-gray-500">
                 Time: {formatTime(timeSpent)} | Test Type: {testType}
