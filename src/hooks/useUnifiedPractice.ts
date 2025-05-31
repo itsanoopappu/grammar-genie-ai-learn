@@ -304,7 +304,7 @@ export const useUnifiedPractice = () => {
   const completeDrill = async () => {
     const finalScore = exercises.length > 0 ? (drillScore / exercises.length) * 100 : 0;
     
-    // Mark drill as resolved in database
+    // Mark current drill as resolved
     if (currentDrill) {
       await supabase
         .from('drill_recommendations')
@@ -315,6 +315,35 @@ export const useUnifiedPractice = () => {
         .eq('topic', currentDrill.topic)
         .eq('level', currentDrill.level)
         .eq('user_id', user?.id);
+
+      // If score is 80% or higher, generate a new drill
+      if (finalScore >= 80) {
+        try {
+          const { data: newDrillData } = await supabase.functions.invoke('drill-recommendations', {
+            body: { 
+              action: 'personalized-recommendations',
+              userLevel: profile?.level,
+              user_id: user?.id,
+              excludeTopics: [currentDrill.topic]
+            }
+          });
+
+          if (newDrillData?.recommendations?.length > 0) {
+            const newDrill = newDrillData.recommendations[0];
+            await supabase
+              .from('drill_recommendations')
+              .insert({
+                user_id: user?.id,
+                topic: newDrill.topic,
+                level: newDrill.level,
+                reason: newDrill.reason,
+                resolved: false
+              });
+          }
+        } catch (error) {
+          console.error('Error generating new drill:', error);
+        }
+      }
     }
     
     // Reset state
@@ -328,7 +357,7 @@ export const useUnifiedPractice = () => {
     setExerciseResult(null);
     setDrillScore(0);
     
-    // Reload recommendations to show completion
+    // Reload recommendations to show completion and any new drills
     loadDrillRecommendations();
   };
 
