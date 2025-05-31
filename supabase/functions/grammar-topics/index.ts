@@ -180,9 +180,30 @@ async function generateExercises(supabaseClient, topicId) {
   })
 
   const aiData = await openAIResponse.json()
-  const exercises = JSON.parse(aiData.choices[0].message.content)
+  let exercises = JSON.parse(aiData.choices[0].message.content)
 
-  // Insert exercises into database with properly structured content
+  // Validate and filter exercises
+  exercises = exercises.filter(exercise => {
+    // Check if exercise has all required properties
+    if (!exercise || typeof exercise !== 'object') return false;
+    if (!exercise.type || typeof exercise.type !== 'string') return false;
+    if (!exercise.content || typeof exercise.content !== 'object') return false;
+    if (!exercise.difficulty_level || typeof exercise.difficulty_level !== 'number') return false;
+
+    // Validate content object
+    const content = exercise.content;
+    if (!content.question || typeof content.question !== 'string') return false;
+    if (!content.correctAnswer && !content.correct_answer) return false;
+
+    // Validate options array for multiple-choice
+    if (exercise.type.toLowerCase() === 'multiple-choice') {
+      if (!Array.isArray(content.options) || content.options.length === 0) return false;
+    }
+
+    return true;
+  });
+
+  // Transform and insert valid exercises into database
   const { data, error } = await supabaseClient
     .from('exercises')
     .insert(exercises.map(ex => ({
