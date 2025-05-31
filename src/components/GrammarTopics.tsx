@@ -8,7 +8,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-import { ChevronDown, ChevronRight, BookOpen, Target, MessageCircle, Leaf, Sprout, Tree } from 'lucide-react';
+import { ChevronDown, ChevronRight, BookOpen, Target, MessageCircle, Leaf, Sprout, Trees as Tree } from 'lucide-react';
 
 const grammarStructure = {
   beginner: {
