@@ -14,9 +14,8 @@ interface Question {
   id: string;
   question: string;
   options: string[];
-  correct_answer: string;
+  correct: string;
   topic: string;
-  level: string;
   explanation: string;
 }
 
@@ -30,20 +29,20 @@ const PlacementTest = () => {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [selectedAnswer, setSelectedAnswer] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<any>(null);
   const [testType, setTestType] = useState<'standard' | 'adaptive'>('standard');
+  const [testId, setTestId] = useState<string | null>(null);
 
   useEffect(() => {
     if (user && !testStarted) {
-      startTest();
+      checkExistingTest();
     }
-  }, [user, testStarted]);
+  }, [user]);
 
-  const startTest = async () => {
-    setLoading(true);
+  const checkExistingTest = async () => {
     try {
-      // Check if there's an existing test
-      const { data: existingTests, error: existingTestError } = await supabase
+      const { data: existingTests } = await supabase
         .from('placement_tests')
         .select('*')
         .eq('user_id', user?.id)
@@ -53,57 +52,65 @@ const PlacementTest = () => {
       if (existingTests && existingTests.length > 0) {
         setTestType(existingTests[0].test_type);
       }
+    } catch (error) {
+      console.error('Error checking existing test:', error);
+    }
+  };
 
+  const startTest = async () => {
+    setLoading(true);
+    setError(null);
+    try {
       const { data, error } = await supabase.functions.invoke('placement-test', {
         body: { 
           action: 'generate',
-          userLevel: profile?.level,
-          testType: testType
+          level: profile?.level || 'A2',
+          adaptive: testType === 'adaptive',
+          user_id: user?.id
         }
       });
 
       if (error) throw error;
       
       setQuestions(data.questions);
+      setTestId(data.testId);
       setTestStarted(true);
-    } catch (error) {
+      setCurrentQuestion(0);
+      setAnswers({});
+    } catch (error: any) {
+      setError(error.message || 'Failed to start test');
       console.error('Error starting test:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAnswerSelect = (value: string) => {
-    setSelectedAnswer(value);
-  };
-
   const submitAnswer = async () => {
     if (!selectedAnswer) return;
 
-    setAnswers(prevAnswers => ({
-      ...prevAnswers,
+    const updatedAnswers = {
+      ...answers,
       [questions[currentQuestion].id]: selectedAnswer
-    }));
+    };
+    setAnswers(updatedAnswers);
 
     if (currentQuestion < questions.length - 1) {
-      setCurrentQuestion(currentQuestion + 1);
+      setCurrentQuestion(prev => prev + 1);
       setSelectedAnswer('');
     } else {
-      await completeTest();
+      await completeTest(updatedAnswers);
     }
   };
 
-  const completeTest = async () => {
+  const completeTest = async (finalAnswers: Record<string, string>) => {
     setLoading(true);
+    setError(null);
     try {
       const { data, error } = await supabase.functions.invoke('placement-test', {
         body: { 
           action: 'evaluate',
-          questions,
-          answers: {
-            ...answers,
-            [questions[currentQuestion].id]: selectedAnswer
-          }
+          test_id: testId,
+          answers: finalAnswers
         }
       });
 
@@ -111,54 +118,18 @@ const PlacementTest = () => {
       
       setTestResults(data);
       setTestCompleted(true);
-      await saveTestResults(data.score, data.level, data);
-    } catch (error) {
+
+      if (profile && data.recommendedLevel) {
+        await updateProfile({ 
+          level: data.recommendedLevel,
+          xp: (profile.xp || 0) + 50
+        });
+      }
+    } catch (error: any) {
+      setError(error.message || 'Failed to complete test');
       console.error('Error completing test:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const saveTestResults = async (score: number, level: string, results: any) => {
-    if (!user) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('placement_tests')
-        .insert({
-          user_id: user.id,
-          test_type: testType,
-          score,
-          level,
-          completed_at: new Date().toISOString()
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      // Save detailed results
-      await supabase
-        .from('assessment_results')
-        .insert({
-          user_id: user.id,
-          assessment_type: 'placement',
-          topics_assessed: results.topicsAssessed,
-          overall_score: score,
-          strengths: results.strengths,
-          weaknesses: results.weaknesses,
-          recommended_level: level,
-          detailed_analysis: results.detailedAnalysis,
-          next_steps: results.nextSteps
-        });
-
-      // Update user profile with new level
-      if (profile) {
-        await updateProfile({ level });
-      }
-
-    } catch (error) {
-      console.error('Error saving test results:', error);
     }
   };
 
@@ -170,9 +141,11 @@ const PlacementTest = () => {
     setAnswers({});
     setSelectedAnswer('');
     setTestResults(null);
+    setError(null);
+    setTestId(null);
   };
 
-  const testProgress = testStarted ? ((currentQuestion + 1) / questions?.length) * 100 : 0;
+  const testProgress = testStarted ? ((currentQuestion + 1) / questions.length) * 100 : 0;
 
   return (
     <div className="max-w-3xl mx-auto p-4">
@@ -188,12 +161,32 @@ const PlacementTest = () => {
         </CardHeader>
 
         <CardContent>
+          {error && (
+            <div className="mb-4 p-4 bg-red-50 text-red-700 rounded-md">
+              {error}
+            </div>
+          )}
+
           {!testStarted && !testCompleted && (
-            <div className="text-center">
+            <div className="text-center space-y-4">
               <p className="text-gray-600 mb-4">
                 This test will assess your English skills and provide you with an accurate proficiency level.
               </p>
-              <Button onClick={startTest} disabled={loading}>
+              <div className="space-x-4">
+                <Button 
+                  variant={testType === 'standard' ? 'default' : 'outline'}
+                  onClick={() => setTestType('standard')}
+                >
+                  Standard Test
+                </Button>
+                <Button 
+                  variant={testType === 'adaptive' ? 'default' : 'outline'}
+                  onClick={() => setTestType('adaptive')}
+                >
+                  Adaptive Test
+                </Button>
+              </div>
+              <Button onClick={startTest} disabled={loading} className="mt-4">
                 {loading ? 'Loading...' : 'Start Test'}
               </Button>
             </div>
@@ -202,53 +195,67 @@ const PlacementTest = () => {
           {testStarted && !testCompleted && questions.length > 0 && (
             <div className="space-y-6">
               <Progress value={testProgress} className="h-2" />
-              <div className="text-lg font-semibold">
-                Question {currentQuestion + 1} of {questions.length}
+              <div className="flex justify-between items-center">
+                <div className="text-lg font-semibold">
+                  Question {currentQuestion + 1} of {questions.length}
+                </div>
+                <Badge variant="outline">
+                  {testType === 'adaptive' ? 'Adaptive' : 'Standard'} Test
+                </Badge>
               </div>
-              <div className="text-gray-700">{questions[currentQuestion].question}</div>
-              <RadioGroup value={selectedAnswer} onValueChange={handleAnswerSelect}>
+              
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <p className="text-lg font-medium">{questions[currentQuestion].question}</p>
+              </div>
+
+              <RadioGroup value={selectedAnswer} onValueChange={setSelectedAnswer}>
                 <div className="grid gap-2">
                   {questions[currentQuestion].options.map((option) => (
                     <div key={option} className="flex items-center space-x-2">
-                      <RadioGroupItem value={option} id={option} className="peer sr-only" />
-                      <Label
-                        htmlFor={option}
-                        className="cursor-pointer rounded-md border-2 border-muted bg-popover p-4 text-sm font-medium shadow-sm data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary peer-data-[state=checked]:text-primary-foreground [&:has([data-state=checked])]:border-primary [&:has([data-state=checked])]:bg-primary [&:has([data-state=checked])]:text-primary-foreground"
-                      >
-                        {option}
-                      </Label>
+                      <RadioGroupItem value={option} id={option} />
+                      <Label htmlFor={option}>{option}</Label>
                     </div>
                   ))}
                 </div>
               </RadioGroup>
-              <Button onClick={submitAnswer} disabled={!selectedAnswer || loading}>
-                {loading ? 'Loading...' : 'Submit Answer'}
+
+              <Button 
+                onClick={submitAnswer} 
+                disabled={!selectedAnswer || loading}
+                className="w-full"
+              >
+                {loading ? 'Processing...' : 'Submit Answer'}
               </Button>
             </div>
           )}
 
           {testCompleted && testResults && (
-            <div className="space-y-4">
+            <div className="space-y-6">
               <div className="text-center">
-                <CheckCircle className="h-10 w-10 mx-auto text-green-500" />
-                <h3 className="text-2xl font-semibold">Test Completed!</h3>
-                <p className="text-gray-600">
-                  Your estimated English level is: <Badge variant="secondary">{testResults.level}</Badge>
-                </p>
-                <p className="text-gray-600">
-                  Score: {testResults.score} / {questions.length}
-                </p>
+                <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
+                <h3 className="text-2xl font-semibold mb-2">Test Completed!</h3>
+                <div className="space-y-2">
+                  <p className="text-xl">
+                    Your level: <Badge className="ml-2 text-lg">{testResults.recommendedLevel}</Badge>
+                  </p>
+                  <p className="text-gray-600">
+                    Score: {Math.round(testResults.score)}%
+                  </p>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Strengths</CardTitle>
+                    <CardTitle className="flex items-center space-x-2">
+                      <CheckCircle className="h-5 w-5 text-green-500" />
+                      <span>Strengths</span>
+                    </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <ul className="list-disc list-inside">
+                    <ul className="list-disc list-inside space-y-1">
                       {testResults.strengths.map((strength: string, index: number) => (
-                        <li key={index}>{strength}</li>
+                        <li key={index} className="text-green-700">{strength}</li>
                       ))}
                     </ul>
                   </CardContent>
@@ -256,20 +263,42 @@ const PlacementTest = () => {
 
                 <Card>
                   <CardHeader>
-                    <CardTitle>Weaknesses</CardTitle>
+                    <CardTitle className="flex items-center space-x-2">
+                      <Target className="h-5 w-5 text-red-500" />
+                      <span>Areas to Improve</span>
+                    </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <ul className="list-disc list-inside">
+                    <ul className="list-disc list-inside space-y-1">
                       {testResults.weaknesses.map((weakness: string, index: number) => (
-                        <li key={index}>{weakness}</li>
+                        <li key={index} className="text-red-700">{weakness}</li>
                       ))}
                     </ul>
                   </CardContent>
                 </Card>
               </div>
 
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <TrendingUp className="h-5 w-5 text-blue-500" />
+                    <span>Next Steps</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ul className="space-y-2">
+                    {testResults.nextSteps.map((step: string, index: number) => (
+                      <li key={index} className="flex items-center space-x-2">
+                        <BookOpen className="h-4 w-4 text-blue-500 shrink-0" />
+                        <span>{step}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+
               <div className="text-center">
-                <Button onClick={resetTest}>Take Again</Button>
+                <Button onClick={resetTest}>Take Another Test</Button>
               </div>
             </div>
           )}
