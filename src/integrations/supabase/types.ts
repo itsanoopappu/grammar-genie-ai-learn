@@ -83,7 +83,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       chat_messages: {
@@ -121,7 +121,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "chat_sessions"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       chat_sessions: {
@@ -150,7 +150,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       drill_recommendations: {
@@ -161,6 +161,7 @@ export type Database = {
           reason: string | null
           recommended_at: string | null
           resolved: boolean | null
+          score: number | null
           topic: string
           user_id: string | null
         }
@@ -171,6 +172,7 @@ export type Database = {
           reason?: string | null
           recommended_at?: string | null
           resolved?: boolean | null
+          score?: number | null
           topic: string
           user_id?: string | null
         }
@@ -181,6 +183,7 @@ export type Database = {
           reason?: string | null
           recommended_at?: string | null
           resolved?: boolean | null
+          score?: number | null
           topic?: string
           user_id?: string | null
         }
@@ -191,7 +194,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       exercise_attempts: {
@@ -258,7 +261,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       exercises: {
@@ -308,7 +311,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "grammar_topics"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       grammar_topics: {
@@ -404,7 +407,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       placement_tests: {
@@ -442,7 +445,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       practice_sessions: {
@@ -505,7 +508,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       profiles: {
@@ -588,7 +591,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "placement_tests"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       user_achievements: {
@@ -624,7 +627,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       user_memory: {
@@ -656,7 +659,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       user_progress: {
@@ -697,7 +700,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       user_skills: {
@@ -754,7 +757,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
     }
