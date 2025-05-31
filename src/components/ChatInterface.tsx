@@ -29,7 +29,8 @@ const ChatInterface = () => {
   const { user } = useAuth();
   const { profile, updateProfile } = useProfile();
   const { 
-    chatDisabled
+    chatDisabled,
+    setAiResponse
   } = useChatContext();
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -212,8 +213,6 @@ const ChatInterface = () => {
 
       // Process AI response through context
       if (data) {
-        const { useChatContext } = await import('@/contexts/ChatContext');
-        const { setAiResponse } = useChatContext();
         setAiResponse(data);
       }
 
