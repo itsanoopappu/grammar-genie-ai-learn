@@ -5,9 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Target, TrendingUp, BookOpen, Brain, Zap, Award, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { Target, TrendingUp, BookOpen, Brain, Zap, Award, Clock, CheckCircle, AlertCircle, HelpCircle } from 'lucide-react';
 import { useIntelligentTutor } from '@/hooks/useIntelligentTutor';
-import { useSmartPractice } from '@/hooks/useSmartPractice';
+import { useUnifiedPractice } from '@/hooks/useUnifiedPractice';
 import { supabase } from '@/integrations/supabase/client';
 import LoadingState from './LoadingState';
 import ErrorDisplay from './ErrorDisplay';
@@ -18,18 +18,35 @@ interface SmartPracticeProps {
 
 const SmartPractice: React.FC<SmartPracticeProps> = ({ onSelectTopic }) => {
   const { topicRecommendations, loading: topicsLoading, getTopicRecommendations } = useIntelligentTutor();
-  const { drillRecommendations, loading: drillsLoading, getDrillRecommendations, startDrill } = useSmartPractice();
+  const { 
+    drillRecommendations, 
+    loading: drillsLoading, 
+    startDrill, 
+    drillInProgress,
+    currentDrill,
+    exercises,
+    currentExercise,
+    userAnswer,
+    selectedOption,
+    showFeedback,
+    exerciseResult,
+    drillScore,
+    setUserAnswer,
+    setSelectedOption,
+    submitAnswer,
+    nextExercise,
+    completeDrill
+  } = useUnifiedPractice();
+  
   const [activeSubTab, setActiveSubTab] = useState('personalized');
   const [hasCompletedAssessment, setHasCompletedAssessment] = useState(false);
 
   useEffect(() => {
     getTopicRecommendations();
-    getDrillRecommendations();
     checkAssessmentHistory();
   }, []);
 
   const checkAssessmentHistory = async () => {
-    // Check if user has completed any assessments to show more relevant recommendations
     try {
       const { data } = await supabase
         .from('assessment_results')
@@ -70,6 +87,15 @@ const SmartPractice: React.FC<SmartPracticeProps> = ({ onSelectTopic }) => {
     }
   };
 
+  const getDifficultyColor = (difficulty: string) => {
+    switch (difficulty) {
+      case 'Easy': return 'bg-green-100 text-green-700';
+      case 'Medium': return 'bg-yellow-100 text-yellow-700';
+      case 'Hard': return 'bg-red-100 text-red-700';
+      default: return 'bg-gray-100 text-gray-700';
+    }
+  };
+
   const getMasteryColor = (mastery: string) => {
     switch (mastery) {
       case 'expert':
@@ -87,17 +113,103 @@ const SmartPractice: React.FC<SmartPracticeProps> = ({ onSelectTopic }) => {
     }
   };
 
-  const getDifficultyColor = (difficulty: string) => {
-    switch (difficulty) {
-      case 'Easy': return 'bg-green-100 text-green-700';
-      case 'Medium': return 'bg-yellow-100 text-yellow-700';
-      case 'Hard': return 'bg-red-100 text-red-700';
-      default: return 'bg-gray-100 text-gray-700';
-    }
-  };
-
   if (loading) {
     return <LoadingState message="Analyzing your progress and creating personalized recommendations..." />;
+  }
+
+  // If drill is in progress, show the drill interface
+  if (drillInProgress && currentDrill && exercises.length > 0) {
+    const currentExerciseData = exercises[currentExercise];
+    
+    return (
+      <div className="max-w-4xl mx-auto space-y-6">
+        <Card className="bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center space-x-2">
+                <Brain className="h-5 w-5 text-purple-500" />
+                <span>{currentDrill.topic}</span>
+              </CardTitle>
+              <Badge variant="outline">{currentExercise + 1} of {exercises.length}</Badge>
+            </div>
+            <CardDescription>{currentDrill.description}</CardDescription>
+            <Progress value={((currentExercise + 1) / exercises.length) * 100} className="mt-2" />
+            <div className="text-sm text-gray-600">Score: {drillScore}/{currentExercise + (showFeedback ? 1 : 0)}</div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 space-y-4">
+              <h3 className="font-semibold text-lg">{currentExerciseData.question}</h3>
+
+              {currentExerciseData.type === 'multiple-choice' && currentExerciseData.options && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {currentExerciseData.options.map((option, index) => (
+                    <Button
+                      key={index}
+                      variant={selectedOption === option ? "default" : "outline"}
+                      className="justify-start h-auto py-3 px-4"
+                      onClick={() => setSelectedOption(option)}
+                      disabled={showFeedback}
+                    >
+                      {String.fromCharCode(65 + index)}) {option}
+                    </Button>
+                  ))}
+                </div>
+              )}
+
+              {currentExerciseData.type !== 'multiple-choice' && (
+                <input
+                  type="text"
+                  value={userAnswer}
+                  onChange={(e) => setUserAnswer(e.target.value)}
+                  placeholder="Type your answer here..."
+                  disabled={showFeedback}
+                  className="w-full text-lg p-3 border border-gray-300 rounded-md"
+                />
+              )}
+            </div>
+
+            {showFeedback && exerciseResult && (
+              <div className={`p-4 rounded-lg border ${exerciseResult.isCorrect ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                <div className="flex items-center space-x-2 mb-2">
+                  {exerciseResult.isCorrect ? (
+                    <CheckCircle className="h-5 w-5 text-green-500" />
+                  ) : (
+                    <Target className="h-5 w-5 text-red-500" />
+                  )}
+                  <span className={`font-semibold ${exerciseResult.isCorrect ? 'text-green-700' : 'text-red-700'}`}>
+                    {exerciseResult.isCorrect ? 'Correct!' : 'Not quite right'}
+                  </span>
+                </div>
+                <p className="text-sm mb-2">{exerciseResult.feedback}</p>
+                <p className="text-xs text-gray-600">{currentExerciseData.explanation}</p>
+                {exerciseResult.xpGained && (
+                  <Badge className="mt-2 bg-yellow-100 text-yellow-700">
+                    +{exerciseResult.xpGained} XP
+                  </Badge>
+                )}
+              </div>
+            )}
+
+            <div className="flex justify-between">
+              <Button variant="outline" onClick={completeDrill}>
+                Exit Drill
+              </Button>
+              <div className="space-x-2">
+                {!showFeedback ? (
+                  <Button onClick={submitAnswer} disabled={loading || (!userAnswer.trim() && !selectedOption)}>
+                    {loading ? 'Checking...' : 'Submit Answer'}
+                  </Button>
+                ) : (
+                  <Button onClick={nextExercise}>
+                    {currentExercise === exercises.length - 1 ? 'Complete Drill' : 'Next Exercise'}
+                  </Button>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   const highPriorityTopics = topicRecommendations.filter(topic => topic.priority === 'high');
@@ -178,7 +290,7 @@ const SmartPractice: React.FC<SmartPracticeProps> = ({ onSelectTopic }) => {
         <TabsList className="w-full bg-white/80 backdrop-blur-sm">
           <TabsTrigger value="personalized" className="flex items-center space-x-2 flex-1">
             <Brain className="h-4 w-4" />
-            <span>Personalized for You</span>
+            <span>AI Practice Drills</span>
           </TabsTrigger>
           <TabsTrigger value="topics" className="flex items-center space-x-2 flex-1">
             <BookOpen className="h-4 w-4" />
@@ -195,7 +307,7 @@ const SmartPractice: React.FC<SmartPracticeProps> = ({ onSelectTopic }) => {
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <Brain className="h-5 w-5 text-purple-600" />
-                <span>AI-Powered Recommendations</span>
+                <span>AI-Powered Practice Drills</span>
               </CardTitle>
               <CardDescription>
                 Personalized drills based on your assessment results and learning patterns
@@ -230,6 +342,7 @@ const SmartPractice: React.FC<SmartPracticeProps> = ({ onSelectTopic }) => {
                         <Button 
                           className="w-full bg-purple-600 hover:bg-purple-700" 
                           onClick={() => startDrill(drill)}
+                          disabled={loading}
                         >
                           Start AI Practice
                         </Button>

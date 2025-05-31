@@ -44,13 +44,13 @@ const AppContent = () => {
               <BookOpen className="h-4 w-4" />
               <span>Grammar Topics</span>
             </TabsTrigger>
-            <TabsTrigger value="chat" className="flex items-center space-x-2 flex-1">
-              <MessageCircle className="h-4 w-4" />
-              <span>AI Tutor</span>
-            </TabsTrigger>
             <TabsTrigger value="assessment" className="flex items-center space-x-2 flex-1">
               <CheckCircle className="h-4 w-4" />
               <span>Assessment</span>
+            </TabsTrigger>
+            <TabsTrigger value="chat" className="flex items-center space-x-2 flex-1">
+              <MessageCircle className="h-4 w-4" />
+              <span>AI Tutor</span>
             </TabsTrigger>
             <TabsTrigger value="progress" className="flex items-center space-x-2 flex-1">
               <TrendingUp className="h-4 w-4" />
@@ -66,12 +66,12 @@ const AppContent = () => {
             <GrammarPractice />
           </TabsContent>
 
-          <TabsContent value="chat" className="mt-0">
-            <ChatInterface />
-          </TabsContent>
-
           <TabsContent value="assessment" className="mt-0">
             <PlacementTest />
+          </TabsContent>
+
+          <TabsContent value="chat" className="mt-0">
+            <ChatInterface />
           </TabsContent>
 
           <TabsContent value="progress" className="mt-0">
