@@ -47,7 +47,7 @@ const PlacementTest = () => {
         .from('placement_tests')
         .select('*')
         .eq('user_id', user?.id)
-        .order('created_at', { ascending: false })
+        .order('started_at', { ascending: false })
         .limit(1)
         .single();
 
@@ -128,7 +128,7 @@ const PlacementTest = () => {
         .from('placement_tests')
         .insert({
           user_id: user.id,
-          test_type: testType, // Now correctly typed as lowercase
+          test_type: testType,
           score,
           level,
           completed_at: new Date().toISOString()
