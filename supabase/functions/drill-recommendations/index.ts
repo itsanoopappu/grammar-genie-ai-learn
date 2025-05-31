@@ -13,7 +13,17 @@ serve(async (req) => {
   }
 
   try {
-    const { action, topic, level, user_id, userAnswer, correctAnswer, userLevel, weakTopics } = await req.json()
+    const { 
+      action, 
+      topic, 
+      level, 
+      user_id, 
+      userAnswer, 
+      correctAnswer, 
+      userLevel, 
+      weakTopics,
+      concept 
+    } = await req.json()
 
     // Initialize Supabase client
     const supabaseClient = createClient(
@@ -174,7 +184,9 @@ serve(async (req) => {
     }
 
     if (action === 'get-concept-explanation') {
-      const { concept } = await req.json()
+      if (!concept) {
+        throw new Error('Concept parameter is required')
+      }
       
       const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
