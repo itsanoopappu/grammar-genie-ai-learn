@@ -47,6 +47,44 @@ interface Drill {
   reason?: string;
 }
 
+// Define staticDrills with some default grammar exercises
+const staticDrills: Drill[] = [
+  {
+    id: 1,
+    topic: 'Present Simple',
+    level: 'A1',
+    description: 'Practice using the present simple tense for daily routines and habits',
+    estimatedTime: 15,
+    difficulty: 'Easy',
+    completed: false,
+    recommended: true,
+    priority: 'high',
+    reason: 'Fundamental grammar concept for beginners'
+  },
+  {
+    id: 2,
+    topic: 'Past Simple',
+    level: 'A2',
+    description: 'Learn to describe past events and experiences',
+    estimatedTime: 20,
+    difficulty: 'Medium',
+    completed: false,
+    recommended: true,
+    priority: 'normal',
+    reason: 'Essential for telling stories and describing past experiences'
+  },
+  {
+    id: 3,
+    topic: 'Present Perfect',
+    level: 'B1',
+    description: 'Understanding and using the present perfect tense',
+    estimatedTime: 25,
+    difficulty: 'Hard',
+    completed: false,
+    recommended: false
+  }
+];
+
 const DrillRecommendations = () => {
   const { user } = useAuth();
   const { profile, updateProfile } = useProfile();
@@ -77,12 +115,90 @@ const DrillRecommendations = () => {
     }
   }, [topicToDrill]);
 
-  // Rest of the component implementation remains exactly the same...
-  // Include all the existing code from the original file
+  const startDrill = (drill: Drill) => {
+    setSelectedDrill(drill);
+    setDrillInProgress(true);
+    // Additional implementation would be needed here
+  };
 
   return (
-    // Existing JSX remains exactly the same...
-    <div>Implementation placeholder</div>
+    <div className="space-y-6 p-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold">Grammar Drills</h2>
+        <Badge variant="outline" className="text-sm">
+          Level: {profile?.level || 'A1'}
+        </Badge>
+      </div>
+
+      {!drillInProgress && (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {[...personalizedDrills, ...staticDrills].map((drill) => (
+            <Card key={drill.id} className="relative">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  {drill.topic}
+                  {drill.recommended && (
+                    <Badge variant="secondary">
+                      <Target className="mr-1 h-3 w-3" />
+                      Recommended
+                    </Badge>
+                  )}
+                </CardTitle>
+                <CardDescription>{drill.description}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4">
+                    <Clock className="h-4 w-4" />
+                    <span>{drill.estimatedTime} minutes</span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <Brain className="h-4 w-4" />
+                    <span>{drill.difficulty}</span>
+                  </div>
+                  <Button
+                    className="w-full"
+                    onClick={() => startDrill(drill)}
+                    disabled={loading}
+                  >
+                    Start Drill
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {drillInProgress && selectedDrill && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{selectedDrill.topic}</CardTitle>
+            <CardDescription>
+              Exercise {currentExercise + 1} of {exercises.length}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {/* Exercise content would go here */}
+            <Button onClick={() => setDrillInProgress(false)}>Exit Drill</Button>
+          </CardContent>
+        </Card>
+      )}
+
+      <Dialog open={conceptDialogOpen} onOpenChange={setConceptDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {selectedConcept?.name || 'Grammar Concept'}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedConcept?.explanation}
+            </DialogDescription>
+          </DialogHeader>
+          {/* Dialog content for grammar concept would go here */}
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 };
 
