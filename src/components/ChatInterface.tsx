@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,7 +12,7 @@ import { useProfile } from '@/hooks/useProfile';
 interface Message {
   id: string;
   content: string;
-  sender: 'user' | 'ai';
+  sender: 'User' | 'AI';
   timestamp: Date;
   corrections?: Array<{
     original: string;
@@ -119,7 +118,7 @@ const ChatInterface = () => {
         const formattedMessages: Message[] = chatMessages.map((msg: any) => ({
           id: msg.id,
           content: msg.message,
-          sender: msg.sender as 'user' | 'ai',
+          sender: msg.sender as 'User' | 'AI',
           timestamp: new Date(msg.created_at),
           corrections: msg.corrections || [],
           suggestions: msg.metadata?.suggestions || [],
@@ -180,7 +179,7 @@ const ChatInterface = () => {
     const userMessage: Message = {
       id: Date.now().toString(),
       content: inputMessage.trim(),
-      sender: 'user',
+      sender: 'User',
       timestamp: new Date()
     };
 
@@ -199,7 +198,7 @@ const ChatInterface = () => {
           context: {
             userLevel: profile?.level || 'A1',
             chatHistory: messages.slice(-5).map(m => ({
-              role: m.sender === 'user' ? 'user' : 'assistant',
+              role: m.sender === 'User' ? 'user' : 'assistant',
               content: m.content
             }))
           }
@@ -211,7 +210,7 @@ const ChatInterface = () => {
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
         content: data.response,
-        sender: 'ai',
+        sender: 'AI',
         timestamp: new Date(),
         corrections: data.corrections,
         suggestions: data.suggestions,
@@ -235,7 +234,7 @@ const ChatInterface = () => {
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         content: 'Sorry, I encountered an error. Please try again.',
-        sender: 'ai',
+        sender: 'AI',
         timestamp: new Date()
       };
       setMessages([...updatedMessages, errorMessage]);
@@ -279,15 +278,15 @@ const ChatInterface = () => {
                 <div
                   key={message.id}
                   className={`flex items-start space-x-3 ${
-                    message.sender === 'user' ? 'flex-row-reverse space-x-reverse' : ''
+                    message.sender === 'User' ? 'flex-row-reverse space-x-reverse' : ''
                   }`}
                 >
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                    message.sender === 'user' 
+                    message.sender === 'User' 
                       ? 'bg-blue-500 text-white' 
                       : 'bg-green-500 text-white'
                   }`}>
-                    {message.sender === 'user' ? (
+                    {message.sender === 'User' ? (
                       <User className="h-4 w-4" />
                     ) : (
                       <Bot className="h-4 w-4" />
@@ -295,15 +294,15 @@ const ChatInterface = () => {
                   </div>
 
                   <div className={`flex-1 max-w-[80%] ${
-                    message.sender === 'user' ? 'text-right' : 'text-left'
+                    message.sender === 'User' ? 'text-right' : 'text-left'
                   }`}>
                     <div className={`inline-block p-3 rounded-lg ${
-                      message.sender === 'user'
+                      message.sender === 'User'
                         ? 'bg-blue-500 text-white'
                         : 'bg-gray-100 text-gray-900'
                     }`}>
                       <p className="whitespace-pre-wrap">{message.content}</p>
-                      {message.sender === 'ai' && (
+                      {message.sender === 'AI' && (
                         <Button
                           variant="ghost"
                           size="sm"
