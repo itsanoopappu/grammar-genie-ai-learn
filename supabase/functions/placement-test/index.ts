@@ -146,21 +146,22 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { action, level = 'A2', user_id, answers, test_id, test_type = 'placement' } = await req.json()
+    const { action, level = 'A2', user_id, answers, test_id, test_type = 'quick' } = await req.json()
 
     if (action === 'generate') {
-      // Create test entry with valid enum value
+      // Create test entry with valid enum value - using 'assessment' instead of 'placement'
       const { data: testData, error: testError } = await supabaseClient
         .from('placement_tests')
         .insert({
           user_id,
-          test_type: 'placement', // Use valid enum value
+          test_type: 'assessment', // Use valid enum value from database
           started_at: new Date().toISOString()
         })
         .select()
         .single()
 
       if (testError) {
+        console.error('Test creation error:', testError);
         throw new Error(`Failed to create test entry: ${testError.message}`);
       }
 
@@ -237,6 +238,7 @@ serve(async (req) => {
         )
 
       if (questionsError) {
+        console.error('Questions insertion error:', questionsError);
         throw new Error(`Failed to store questions: ${questionsError.message}`);
       }
 
@@ -258,6 +260,7 @@ serve(async (req) => {
         .order('question_order');
 
       if (questionsError) {
+        console.error('Questions fetch error:', questionsError);
         throw new Error(`Failed to fetch questions: ${questionsError.message}`);
       }
 
@@ -323,6 +326,7 @@ serve(async (req) => {
         .eq('id', test_id);
 
       if (updateError) {
+        console.error('Test update error:', updateError);
         throw new Error(`Failed to update test: ${updateError.message}`);
       }
 
