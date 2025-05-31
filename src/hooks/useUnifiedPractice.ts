@@ -182,7 +182,7 @@ export const useUnifiedPractice = () => {
         .eq('level', drill.level)
         .eq('user_id', user?.id)
         .eq('resolved', false)
-        .maybeSingle(); // Changed from .single() to .maybeSingle()
+        .maybeSingle();
 
       if (existingDrill?.drill_data) {
         const exercises = Array.isArray(existingDrill.drill_data) 
@@ -200,14 +200,14 @@ export const useUnifiedPractice = () => {
         return;
       }
 
-      // Generate new exercises using the grammar-topics function
-      const { data, error } = await supabase.functions.invoke('grammar-topics', {
+      // Generate new exercises using the drill-recommendations function
+      const { data, error } = await supabase.functions.invoke('drill-recommendations', {
         body: { 
-          action: 'generate_exercises',
+          action: 'generate',
           topic: drill.topic,
           level: drill.level,
-          count: 5,
-          userLevel: profile?.level
+          userLevel: profile?.level,
+          user_id: user?.id
         }
       });
 
