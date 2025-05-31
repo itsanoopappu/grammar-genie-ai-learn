@@ -148,12 +148,12 @@ serve(async (req) => {
     const { action, level = 'A2', user_id, answers, test_id, test_type = 'quick' } = await req.json()
 
     if (action === 'generate') {
-      // Create test entry with valid enum value - using 'standard' instead of 'assessment'
+      // Map test_type to valid enum values
       const { data: testData, error: testError } = await supabaseClient
         .from('placement_tests')
         .insert({
           user_id,
-          test_type: 'standard', // Changed to use valid enum value
+          test_type: test_type === 'quick' ? 'standard' : 'adaptive',
           started_at: new Date().toISOString()
         })
         .select()
@@ -220,19 +220,18 @@ serve(async (req) => {
         }
       }
 
-      // Store questions
+      // Store questions without question_order field
       const { error: questionsError } = await supabaseClient
         .from('test_questions')
         .insert(
-          questions.map((q: any, index: number) => ({
+          questions.map((q: any) => ({
             test_id: testData.id,
             question: q.question,
             options: q.options,
             correct_answer: q.correct,
             topic: q.topic,
             explanation: q.explanation,
-            level: q.level || level,
-            question_order: index
+            level: q.level || level
           }))
         )
 
@@ -256,7 +255,6 @@ serve(async (req) => {
         .from('test_questions')
         .select('*')
         .eq('test_id', test_id)
-        .order('question_order');
 
       if (questionsError) {
         console.error('Questions fetch error:', questionsError);
