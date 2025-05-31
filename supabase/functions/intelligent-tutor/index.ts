@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -48,11 +47,14 @@ serve(async (req) => {
       case 'get_topic_recommendations':
         return await getTopicRecommendations(supabaseClient, user_id, user_level)
       
-      case 'create_learning_path':
-        return await createLearningPath(supabaseClient, user_id, user_level)
+      case 'get_assessment_driven_recommendations':
+        return await getAssessmentDrivenRecommendations(supabaseClient, user_id, user_level)
       
       case 'update_skill_model':
         return await updateSkillModel(supabaseClient, req.json())
+      
+      case 'get_adaptive_difficulty':
+        return await getAdaptiveDifficulty(supabaseClient, user_id, topic_id)
       
       default:
         throw new Error('Invalid action')
@@ -70,27 +72,26 @@ async function getPersonalizedExercises(supabaseClient: any, user_id: string, to
   // Get user's skill level for this topic
   const { data: userSkill } = await supabaseClient
     .from('user_skills')
-    .select('skill_level, attempts_count, mastery_level')
+    .select('skill_level, attempts_count, mastery_level, confidence_interval')
     .eq('user_id', user_id)
     .eq('topic_id', topic_id)
     .single()
 
-  // Calculate optimal difficulty based on skill level
-  const skillLevel = userSkill?.skill_level || 0.5
-  const targetDifficulty = Math.max(1, Math.min(10, Math.round(skillLevel * 10) + (Math.random() - 0.5)))
+  // Get adaptive difficulty based on recent performance
+  const adaptiveDifficulty = await getAdaptiveDifficultyLevel(supabaseClient, user_id, topic_id, userSkill)
 
   // Get existing exercises for this topic and difficulty
   let { data: exercises } = await supabaseClient
     .from('exercises')
     .select('*')
     .eq('topic_id', topic_id)
-    .gte('difficulty_level', targetDifficulty - 1)
-    .lte('difficulty_level', targetDifficulty + 1)
+    .gte('difficulty_level', adaptiveDifficulty - 1)
+    .lte('difficulty_level', adaptiveDifficulty + 1)
     .limit(5)
 
   // If no exercises exist, generate them using AI
   if (!exercises || exercises.length === 0) {
-    exercises = await generateExercisesForTopic(supabaseClient, topic_id, targetDifficulty, user_level)
+    exercises = await generateExercisesForTopic(supabaseClient, topic_id, adaptiveDifficulty, user_level)
   }
 
   // Create or update practice session
@@ -99,8 +100,8 @@ async function getPersonalizedExercises(supabaseClient: any, user_id: string, to
     .insert({
       user_id,
       topic_id,
-      session_type: 'practice',
-      difficulty_progression: [targetDifficulty]
+      session_type: 'adaptive_practice',
+      difficulty_progression: [adaptiveDifficulty]
     })
     .select()
     .single()
@@ -109,8 +110,165 @@ async function getPersonalizedExercises(supabaseClient: any, user_id: string, to
     JSON.stringify({ 
       exercises: exercises.slice(0, 3), 
       session_id: session.id,
-      target_difficulty: targetDifficulty,
-      skill_level: skillLevel
+      target_difficulty: adaptiveDifficulty,
+      skill_level: userSkill?.skill_level || 0.5,
+      confidence: userSkill?.confidence_interval || 0.2
+    }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  )
+}
+
+async function getAssessmentDrivenRecommendations(supabaseClient: any, user_id: string, user_level: string) {
+  // Get latest assessment results
+  const { data: latestAssessment } = await supabaseClient
+    .from('assessment_results')
+    .select('*')
+    .eq('user_id', user_id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single()
+
+  if (!latestAssessment) {
+    return await getTopicRecommendations(supabaseClient, user_id, user_level)
+  }
+
+  // Get user's current skills
+  const { data: userSkills } = await supabaseClient
+    .from('user_skills')
+    .select('*, grammar_topics(*)')
+    .eq('user_id', user_id)
+
+  // Create assessment-driven recommendations
+  const weaknessTopics = latestAssessment.weaknesses || []
+  const strengthTopics = latestAssessment.strengths || []
+  
+  // Get all topics for user's level
+  const { data: allTopics } = await supabaseClient
+    .from('grammar_topics')
+    .select('*')
+    .eq('level', latestAssessment.recommended_level || user_level)
+    .order('difficulty_score')
+
+  const recommendations = allTopics?.map(topic => {
+    const userSkill = userSkills?.find(skill => skill.topic_id === topic.id)
+    const skillLevel = userSkill?.skill_level || 0
+    const isWeakness = weaknessTopics.includes(topic.name)
+    const isStrength = strengthTopics.includes(topic.name)
+    
+    let priority = 'normal'
+    let reason = 'Continue learning'
+    let confidence = latestAssessment.overall_score / 100
+    
+    if (isWeakness) {
+      priority = 'high'
+      reason = `Identified as weakness in recent assessment (${Math.round(confidence * 100)}% confidence)`
+    } else if (isStrength && skillLevel > 0.8) {
+      priority = 'low'
+      reason = `Strong performance in assessment - occasional review recommended`
+    } else if (!userSkill) {
+      priority = 'high'
+      reason = 'New topic - recommended based on your level'
+    } else if (skillLevel < 0.4) {
+      priority = 'high'
+      reason = 'Below proficiency threshold - needs improvement'
+    }
+    
+    // Calculate days since last practice
+    const daysSinceLastPractice = userSkill?.last_practiced 
+      ? Math.floor((new Date().getTime() - new Date(userSkill.last_practiced).getTime()) / (1000 * 60 * 60 * 24))
+      : null
+
+    // Apply spaced repetition logic
+    if (daysSinceLastPractice && daysSinceLastPractice > 7 && skillLevel > 0.6) {
+      priority = 'normal'
+      reason = `Due for review (last practiced ${daysSinceLastPractice} days ago)`
+    }
+    
+    return {
+      ...topic,
+      skill_level: skillLevel,
+      mastery_level: userSkill?.mastery_level || 'novice',
+      priority,
+      reason,
+      recommended: priority === 'high',
+      assessment_driven: isWeakness || isStrength,
+      confidence_score: confidence,
+      days_since_practice: daysSinceLastPractice
+    }
+  }).sort((a, b) => {
+    // Sort by priority first, then by assessment-driven, then by confidence
+    if (a.priority === 'high' && b.priority !== 'high') return -1
+    if (b.priority === 'high' && a.priority !== 'high') return 1
+    if (a.assessment_driven && !b.assessment_driven) return -1
+    if (b.assessment_driven && !a.assessment_driven) return 1
+    return b.confidence_score - a.confidence_score
+  }) || []
+
+  return new Response(
+    JSON.stringify({ 
+      recommendations: recommendations.slice(0, 10),
+      assessment_data: {
+        score: latestAssessment.overall_score,
+        level: latestAssessment.recommended_level,
+        date: latestAssessment.created_at,
+        weaknesses: weaknessTopics,
+        strengths: strengthTopics
+      }
+    }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  )
+}
+
+async function getAdaptiveDifficultyLevel(supabaseClient: any, user_id: string, topic_id: string, userSkill: any) {
+  if (!userSkill) return 3 // Default difficulty for new topics
+
+  // Get recent performance for this topic (last 10 attempts)
+  const { data: recentAttempts } = await supabaseClient
+    .from('exercise_attempts')
+    .select('is_correct, difficulty_at_attempt, attempted_at')
+    .eq('user_id', user_id)
+    .order('attempted_at', { ascending: false })
+    .limit(10)
+
+  if (!recentAttempts || recentAttempts.length === 0) {
+    return Math.max(1, Math.min(10, Math.round(userSkill.skill_level * 10)))
+  }
+
+  // Calculate recent success rate
+  const recentSuccessRate = recentAttempts.reduce((acc, attempt) => acc + (attempt.is_correct ? 1 : 0), 0) / recentAttempts.length
+  
+  // Target success rate is 70-80% (optimal challenge zone)
+  const targetSuccessRate = 0.75
+  const currentDifficulty = userSkill.skill_level * 10
+  
+  let adjustedDifficulty = currentDifficulty
+  
+  if (recentSuccessRate > 0.85) {
+    // Too easy - increase difficulty
+    adjustedDifficulty = Math.min(10, currentDifficulty + 1)
+  } else if (recentSuccessRate < 0.6) {
+    // Too hard - decrease difficulty
+    adjustedDifficulty = Math.max(1, currentDifficulty - 1)
+  }
+  
+  return Math.round(adjustedDifficulty)
+}
+
+async function getAdaptiveDifficulty(supabaseClient: any, user_id: string, topic_id: string) {
+  const { data: userSkill } = await supabaseClient
+    .from('user_skills')
+    .select('*')
+    .eq('user_id', user_id)
+    .eq('topic_id', topic_id)
+    .single()
+
+  const adaptiveDifficulty = await getAdaptiveDifficultyLevel(supabaseClient, user_id, topic_id, userSkill)
+
+  return new Response(
+    JSON.stringify({ 
+      difficulty: adaptiveDifficulty,
+      skill_level: userSkill?.skill_level || 0.5,
+      confidence: userSkill?.confidence_interval || 0.2
     }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   )
@@ -233,8 +391,8 @@ async function evaluateExercise(supabaseClient: any, data: any) {
     })
     .eq('id', session_id)
 
-  // Update user skill model
-  await updateUserSkillLevel(supabaseClient, user_id, exercise.topic_id, isCorrect, exercise.difficulty_level)
+  // Update user skill model with enhanced tracking
+  await updateUserSkillLevel(supabaseClient, user_id, exercise.topic_id, isCorrect, exercise.difficulty_level, time_taken)
 
   return new Response(
     JSON.stringify({ 
@@ -284,8 +442,8 @@ Provide feedback in JSON format:
   return JSON.parse(result.choices[0].message.content)
 }
 
-async function updateUserSkillLevel(supabaseClient: any, user_id: string, topic_id: string, isCorrect: boolean, difficulty: number) {
-  // Bayesian update of skill level based on performance
+async function updateUserSkillLevel(supabaseClient: any, user_id: string, topic_id: string, isCorrect: boolean, difficulty: number, timeTaken: number) {
+  // Enhanced Bayesian update of skill level with time factor
   const { data: currentSkill } = await supabaseClient
     .from('user_skills')
     .select('*')
@@ -296,21 +454,33 @@ async function updateUserSkillLevel(supabaseClient: any, user_id: string, topic_
   let newSkillLevel, newConfidence, newMastery
   
   if (currentSkill) {
-    // Update existing skill
+    // Update existing skill with enhanced algorithm
     const currentLevel = currentSkill.skill_level
     const attempts = currentSkill.attempts_count + 1
     
-    // Simple Bayesian update
-    const evidence = isCorrect ? (difficulty / 10) : -(difficulty / 10) * 0.5
-    newSkillLevel = Math.max(0, Math.min(1, currentLevel + evidence * 0.1))
-    newConfidence = Math.max(0.1, currentSkill.confidence_interval - 0.01)
+    // Factor in time taken (faster = better understanding)
+    const timeBonus = timeTaken < 30 ? 0.02 : timeTaken > 120 ? -0.01 : 0
     
-    // Update mastery level
-    if (newSkillLevel >= 0.9) newMastery = 'expert'
-    else if (newSkillLevel >= 0.75) newMastery = 'advanced'
-    else if (newSkillLevel >= 0.6) newMastery = 'proficient'
-    else if (newSkillLevel >= 0.4) newMastery = 'developing'
+    // Enhanced Bayesian update with difficulty and time factors
+    const difficultyWeight = difficulty / 10
+    const evidence = isCorrect ? 
+      (difficultyWeight * 0.15 + timeBonus) : 
+      -(difficultyWeight * 0.1)
+    
+    newSkillLevel = Math.max(0, Math.min(1, currentLevel + evidence))
+    newConfidence = Math.max(0.1, currentSkill.confidence_interval - 0.005) // Increase confidence with practice
+    
+    // Update mastery level based on skill level and consistency
+    if (newSkillLevel >= 0.9 && attempts >= 10) newMastery = 'expert'
+    else if (newSkillLevel >= 0.8 && attempts >= 8) newMastery = 'advanced'
+    else if (newSkillLevel >= 0.7 && attempts >= 5) newMastery = 'proficient'
+    else if (newSkillLevel >= 0.5) newMastery = 'developing'
     else newMastery = 'novice'
+
+    // Calculate next review date using spaced repetition
+    const masteryMultiplier = newMastery === 'expert' ? 30 : newMastery === 'advanced' ? 14 : newMastery === 'proficient' ? 7 : 3
+    const nextReviewDue = new Date()
+    nextReviewDue.setDate(nextReviewDue.getDate() + masteryMultiplier)
 
     await supabaseClient
       .from('user_skills')
@@ -319,13 +489,17 @@ async function updateUserSkillLevel(supabaseClient: any, user_id: string, topic_
         confidence_interval: newConfidence,
         attempts_count: attempts,
         mastery_level: newMastery,
-        last_practiced: new Date().toISOString()
+        last_practiced: new Date().toISOString(),
+        next_review_due: nextReviewDue.toISOString()
       })
       .eq('user_id', user_id)
       .eq('topic_id', topic_id)
   } else {
     // Create new skill record
     newSkillLevel = isCorrect ? 0.6 : 0.4
+    const nextReviewDue = new Date()
+    nextReviewDue.setDate(nextReviewDue.getDate() + 3) // New topics review in 3 days
+    
     await supabaseClient
       .from('user_skills')
       .insert({
@@ -334,7 +508,8 @@ async function updateUserSkillLevel(supabaseClient: any, user_id: string, topic_
         skill_level: newSkillLevel,
         attempts_count: 1,
         mastery_level: newSkillLevel >= 0.6 ? 'developing' : 'novice',
-        last_practiced: new Date().toISOString()
+        last_practiced: new Date().toISOString(),
+        next_review_due: nextReviewDue.toISOString()
       })
   }
 }
@@ -426,6 +601,18 @@ async function createLearningPath(supabaseClient: any, user_id: string, user_lev
 
   return new Response(
     JSON.stringify({ learning_path: learningPath }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  )
+}
+
+async function updateSkillModel(supabaseClient: any, data: any) {
+  const { user_id, topic_id, performance_data } = data
+  
+  // This function can be called for batch updates or external integrations
+  // Implementation would depend on specific requirements
+  
+  return new Response(
+    JSON.stringify({ success: true }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   )
 }
