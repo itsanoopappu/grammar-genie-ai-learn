@@ -3,19 +3,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MessageCircle, CheckCircle, Target, BookOpen, TrendingUp } from 'lucide-react';
 import ChatInterface from '@/components/ChatInterface';
 import PlacementTest from '@/components/PlacementTest';
-import DrillRecommendations from '@/components/DrillRecommendations';
+import GrammarPractice from '@/components/GrammarPractice';
 import AuthPage from '@/components/AuthPage';
 import { Header } from '@/components/Header';
 import { GrammarTopics } from '@/components/GrammarTopics';
 import TopicRecommendations from '@/components/TopicRecommendations';
-import IntelligentPractice from '@/components/IntelligentPractice';
 import MyProgress from '@/components/MyProgress';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
 
 const AppContent = () => {
   const { user, loading: authLoading } = useAuth();
   const [activeTab, setActiveTab] = useState('recommendations');
-  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
 
   if (authLoading) {
     return (
@@ -32,11 +30,6 @@ const AppContent = () => {
     return <AuthPage onAuthSuccess={() => {}} />;
   }
 
-  const handleTopicSelect = (topicId: string) => {
-    setSelectedTopicId(topicId);
-    setActiveTab('practice');
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
       <Header />
@@ -49,7 +42,7 @@ const AppContent = () => {
             </TabsTrigger>
             <TabsTrigger value="practice" className="flex items-center space-x-2">
               <BookOpen className="h-4 w-4" />
-              <span>Practice</span>
+              <span>Grammar Topics</span>
             </TabsTrigger>
             <TabsTrigger value="chat" className="flex items-center space-x-2">
               <MessageCircle className="h-4 w-4" />
@@ -66,11 +59,11 @@ const AppContent = () => {
           </TabsList>
 
           <TabsContent value="recommendations">
-            <TopicRecommendations onSelectTopic={handleTopicSelect} />
+            <TopicRecommendations onSelectTopic={() => setActiveTab('practice')} />
           </TabsContent>
 
           <TabsContent value="practice">
-            <IntelligentPractice topicId={selectedTopicId || undefined} />
+            <GrammarPractice />
           </TabsContent>
 
           <TabsContent value="chat">
