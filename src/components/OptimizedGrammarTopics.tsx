@@ -1,11 +1,12 @@
 
+import { useState, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
-import { BookOpen, ChevronRight, MessageCircle, Target } from 'lucide-react';
+import { BookOpen, Loader2 } from 'lucide-react';
 import { useTopics } from '@/hooks/useTopics';
+import { useIntelligentTutor } from '@/hooks/useIntelligentTutor';
+import { PracticeCard } from '@/components/ui/practice-card';
+import GrammarTopicFilters from './GrammarTopicFilters';
 import LoadingState from './LoadingState';
 import ErrorDisplay from './ErrorDisplay';
 
@@ -13,20 +14,117 @@ interface OptimizedGrammarTopicsProps {
   onTopicSelect: (topicId: string) => void;
 }
 
+interface FilterState {
+  search: string;
+  levels: string[];
+  categories: string[];
+  difficulty: string;
+  sortBy: string;
+}
+
 const OptimizedGrammarTopics: React.FC<OptimizedGrammarTopicsProps> = ({ onTopicSelect }) => {
   const { data: topics = [], isLoading, error, refetch } = useTopics();
+  const { topicRecommendations } = useIntelligentTutor();
+  
+  const [filters, setFilters] = useState<FilterState>({
+    search: '',
+    levels: [],
+    categories: [],
+    difficulty: 'all',
+    sortBy: 'name'
+  });
 
-  const groupedTopics = topics.reduce((acc, topic) => {
-    const level = topic.level;
-    if (!acc[level]) {
-      acc[level] = {};
+  // Get unique categories from topics
+  const availableCategories = useMemo(() => {
+    return Array.from(new Set(topics.map(topic => topic.category))).sort();
+  }, [topics]);
+
+  // Filter and sort topics
+  const filteredTopics = useMemo(() => {
+    let filtered = [...topics];
+
+    // Search filter
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase();
+      filtered = filtered.filter(topic =>
+        topic.name.toLowerCase().includes(searchLower) ||
+        topic.description?.toLowerCase().includes(searchLower)
+      );
     }
-    if (!acc[level][topic.category]) {
-      acc[level][topic.category] = [];
+
+    // Level filter
+    if (filters.levels.length > 0) {
+      filtered = filtered.filter(topic => filters.levels.includes(topic.level));
     }
-    acc[level][topic.category].push(topic);
-    return acc;
-  }, {} as Record<string, Record<string, any[]>>);
+
+    // Category filter
+    if (filters.categories.length > 0) {
+      filtered = filtered.filter(topic => filters.categories.includes(topic.category));
+    }
+
+    // Difficulty filter
+    if (filters.difficulty !== 'all') {
+      filtered = filtered.filter(topic => {
+        const difficulty = topic.difficulty_score;
+        switch (filters.difficulty) {
+          case 'easy': return difficulty <= 30;
+          case 'medium': return difficulty > 30 && difficulty <= 70;
+          case 'hard': return difficulty > 70;
+          default: return true;
+        }
+      });
+    }
+
+    // Sort topics
+    filtered.sort((a, b) => {
+      switch (filters.sortBy) {
+        case 'name':
+          return a.name.localeCompare(b.name);
+        case 'difficulty':
+          return a.difficulty_score - b.difficulty_score;
+        case 'level':
+          const levelOrder = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+          return levelOrder.indexOf(a.level) - levelOrder.indexOf(b.level);
+        case 'recommended':
+          const aRecommended = topicRecommendations.some(rec => rec.id === a.id);
+          const bRecommended = topicRecommendations.some(rec => rec.id === b.id);
+          if (aRecommended && !bRecommended) return -1;
+          if (!aRecommended && bRecommended) return 1;
+          return a.name.localeCompare(b.name);
+        default:
+          return 0;
+      }
+    });
+
+    return filtered;
+  }, [topics, filters, topicRecommendations]);
+
+  const getDifficultyLevel = (score: number): 'Easy' | 'Medium' | 'Hard' => {
+    if (score <= 30) return 'Easy';
+    if (score <= 70) return 'Medium';
+    return 'Hard';
+  };
+
+  const getEstimatedTime = (difficultyScore: number): number => {
+    // Base time on difficulty: easier topics = less time
+    if (difficultyScore <= 30) return 15;
+    if (difficultyScore <= 70) return 25;
+    return 35;
+  };
+
+  const isTopicRecommended = (topicId: string): boolean => {
+    return topicRecommendations.some(rec => rec.id === topicId);
+  };
+
+  const getTopicPriority = (topicId: string): 'high' | 'normal' | 'low' => {
+    const recommendation = topicRecommendations.find(rec => rec.id === topicId);
+    return recommendation?.priority || 'normal';
+  };
+
+  const getTopicReason = (topicId: string): string | undefined => {
+    const recommendation = topicRecommendations.find(rec => rec.id === topicId);
+    return recommendation?.reason;
+  };
 
   if (isLoading) {
     return <LoadingState message="Loading grammar topics..." />;
@@ -37,80 +135,70 @@ const OptimizedGrammarTopics: React.FC<OptimizedGrammarTopicsProps> = ({ onTopic
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      {Object.entries(groupedTopics).map(([level, categories]) => (
-        <Card key={level}>
-          <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50">
-            <CardTitle className="flex items-center space-x-2">
-              <BookOpen className="h-5 w-5 text-blue-600" />
-              <span>Level {level}</span>
-            </CardTitle>
-            <CardDescription>
-              {level.startsWith('A') ? 'Basic/Elementary Level' :
-               level.startsWith('B') ? 'Intermediate Level' :
-               'Advanced Level'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-6">
-            <ScrollArea className="h-full pr-4">
-              {Object.entries(categories).map(([category, topicList]) => (
-                <div key={category} className="mb-6 last:mb-0">
-                  <h3 className="text-lg font-semibold text-blue-700 mb-3">{category}</h3>
-                  <div className="grid gap-2">
-                    {topicList.map((topic) => (
-                      <Card 
-                        key={topic.id}
-                        className="hover:bg-gray-50 transition-colors cursor-pointer"
-                        onClick={() => onTopicSelect(topic.id)}
-                      >
-                        <CardContent className="p-3">
-                          <div className="flex items-center justify-between">
-                            <div className="flex-1">
-                              <h4 className="font-medium">{topic.name}</h4>
-                              <p className="text-sm text-gray-600">{topic.description}</p>
-                              <div className="flex items-center space-x-2 mt-2">
-                                <Badge variant="outline">{topic.level}</Badge>
-                                <Badge variant="secondary">
-                                  Difficulty: {topic.difficulty_score}/100
-                                </Badge>
-                              </div>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 w-8 p-0"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onTopicSelect(topic.id);
-                                }}
-                              >
-                                <Target className="h-4 w-4" />
-                                <span className="sr-only">Practice</span>
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 w-8 p-0"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <MessageCircle className="h-4 w-4" />
-                                <span className="sr-only">Discuss</span>
-                              </Button>
-                              <ChevronRight className="h-4 w-4 text-gray-400" />
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                  <Separator className="my-6" />
-                </div>
-              ))}
-            </ScrollArea>
-          </CardContent>
+    <div className="max-w-7xl mx-auto space-y-6">
+      {/* Header */}
+      <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <BookOpen className="h-6 w-6 text-blue-600" />
+            <span>Grammar Topics Practice</span>
+          </CardTitle>
+          <CardDescription>
+            Choose from comprehensive grammar topics and start practicing with personalized exercises.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+
+      {/* Filters */}
+      <GrammarTopicFilters
+        filters={filters}
+        onFiltersChange={setFilters}
+        totalTopics={topics.length}
+        filteredCount={filteredTopics.length}
+        availableCategories={availableCategories}
+      />
+
+      {/* Topics Grid */}
+      {filteredTopics.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredTopics.map((topic) => {
+            const isRecommended = isTopicRecommended(topic.id);
+            const priority = getTopicPriority(topic.id);
+            const reason = getTopicReason(topic.id);
+            
+            return (
+              <PracticeCard
+                key={topic.id}
+                title={topic.name}
+                description={topic.description || ''}
+                level={topic.level}
+                difficulty={getDifficultyLevel(topic.difficulty_score)}
+                estimatedTime={getEstimatedTime(topic.difficulty_score)}
+                priority={priority}
+                recommended={isRecommended}
+                reason={reason}
+                variant={isRecommended ? 'ai' : 'topic'}
+                onAction={() => onTopicSelect(topic.id)}
+                actionLabel="Start Practice"
+                className="h-full"
+              />
+            );
+          })}
+        </div>
+      ) : (
+        <Card className="text-center p-12">
+          <div className="text-gray-500">
+            <BookOpen className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+            <h3 className="text-lg font-semibold mb-2">No Topics Found</h3>
+            <p className="mb-4">
+              No grammar topics match your current filters. Try adjusting your search criteria.
+            </p>
+            <Badge variant="outline" className="text-gray-600">
+              {topics.length} total topics available
+            </Badge>
+          </div>
         </Card>
-      ))}
+      )}
     </div>
   );
 };
