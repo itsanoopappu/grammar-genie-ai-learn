@@ -41,6 +41,23 @@ const AppContent = () => {
     { id: 4, name: 'Perfect Score', icon: '💯', unlocked: false }
   ];
 
+  // Map profile data to match UserProfile component expectations
+  const userData = profile ? {
+    username: profile.username || 'Student',
+    level: profile.level || 'A1',
+    xp: profile.xp || 0,
+    streak: profile.streak || 0,
+    totalLessons: profile.total_lessons || 45,
+    completedLessons: profile.completed_lessons || 0
+  } : {
+    username: 'Student',
+    level: 'A1',
+    xp: 0,
+    streak: 0,
+    totalLessons: 45,
+    completedLessons: 0
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
       <div className="container mx-auto p-4 max-w-7xl">
@@ -236,7 +253,7 @@ const AppContent = () => {
           </TabsContent>
 
           <TabsContent value="profile">
-            <UserProfile userData={profile} achievements={achievements} />
+            <UserProfile userData={userData} achievements={achievements} />
           </TabsContent>
         </Tabs>
       </div>
