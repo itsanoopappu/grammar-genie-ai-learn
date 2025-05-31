@@ -31,7 +31,7 @@ const PlacementTest = () => {
   const [selectedAnswer, setSelectedAnswer] = useState('');
   const [loading, setLoading] = useState(false);
   const [testResults, setTestResults] = useState<any>(null);
-  const [testType, setTestType<'standard' | 'adaptive'>>('standard'); // Updated to lowercase
+  const [testType, setTestType] = useState<'standard' | 'adaptive'>('standard');
 
   useEffect(() => {
     if (user && !testStarted) {
