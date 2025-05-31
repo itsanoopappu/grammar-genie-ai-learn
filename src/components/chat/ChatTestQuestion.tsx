@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -14,6 +14,11 @@ interface ChatTestQuestionProps {
   explanation: string;
   onAnswer: (answer: string) => void;
   onComplete?: () => void;
+  initialAnswer?: string;
+  initialIsCorrect?: boolean;
+  initialFeedback?: string;
+  disabled?: boolean;
+  status?: 'active' | 'feedbackDisplayed' | 'completed';
 }
 
 const ChatTestQuestion: React.FC<ChatTestQuestionProps> = ({
@@ -23,15 +28,34 @@ const ChatTestQuestion: React.FC<ChatTestQuestionProps> = ({
   correctAnswer,
   explanation,
   onAnswer,
-  onComplete
+  onComplete,
+  initialAnswer,
+  initialIsCorrect,
+  initialFeedback,
+  disabled = false,
+  status
 }) => {
-  const [answer, setAnswer] = useState('');
-  const [submitted, setSubmitted] = useState(false);
-  const [isCorrect, setIsCorrect] = useState(false);
-  const [feedback, setFeedback] = useState<string | null>(null);
+  const [answer, setAnswer] = useState(initialAnswer || '');
+  const [submitted, setSubmitted] = useState(!!initialAnswer);
+  const [isCorrect, setIsCorrect] = useState(initialIsCorrect || false);
+  const [feedback, setFeedback] = useState<string | null>(initialFeedback || null);
+
+  // Update state when props change
+  useEffect(() => {
+    if (initialAnswer) {
+      setAnswer(initialAnswer);
+      setSubmitted(true);
+    }
+    if (initialIsCorrect !== undefined) {
+      setIsCorrect(initialIsCorrect);
+    }
+    if (initialFeedback) {
+      setFeedback(initialFeedback);
+    }
+  }, [initialAnswer, initialIsCorrect, initialFeedback]);
 
   const handleSubmit = () => {
-    if (!answer) return;
+    if (!answer || disabled) return;
 
     const correct = answer.toLowerCase().trim() === correctAnswer.toLowerCase().trim();
     setIsCorrect(correct);
@@ -41,11 +65,41 @@ const ChatTestQuestion: React.FC<ChatTestQuestionProps> = ({
   };
 
   const handleNext = () => {
+    if (disabled) return;
+    
     setAnswer('');
     setSubmitted(false);
     setFeedback(null);
     if (onComplete) onComplete();
   };
+
+  // If the question is completed, show a compact version
+  if (status === 'completed') {
+    return (
+      <Card className="mb-4 border border-gray-200 bg-gray-50">
+        <CardContent className="p-4">
+          <div className="flex items-start justify-between">
+            <div>
+              <h3 className="font-medium text-gray-700">{question}</h3>
+              <div className="flex items-center mt-1 text-sm">
+                <span className={isCorrect ? "text-green-600" : "text-red-600"}>
+                  {isCorrect ? "Correct" : "Incorrect"} answer: 
+                </span>
+                <span className="ml-1 font-medium">
+                  {answer || "No answer provided"}
+                </span>
+              </div>
+            </div>
+            {isCorrect ? (
+              <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
+            ) : (
+              <XCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="mb-4 border-2 border-blue-200">
@@ -57,10 +111,10 @@ const ChatTestQuestion: React.FC<ChatTestQuestionProps> = ({
           <RadioGroup
             value={answer}
             onValueChange={setAnswer}
-            disabled={submitted}
+            disabled={submitted || disabled}
             className="space-y-2"
           >
-            {options.map((option) => (
+            {options?.map((option) => (
               <div key={option} className="flex items-center space-x-2">
                 <RadioGroupItem value={option} id={option} />
                 <Label htmlFor={option} className="cursor-pointer">
@@ -74,7 +128,7 @@ const ChatTestQuestion: React.FC<ChatTestQuestionProps> = ({
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
             placeholder="Type your answer..."
-            disabled={submitted}
+            disabled={submitted || disabled}
             className="w-full"
           />
         )}
@@ -82,7 +136,7 @@ const ChatTestQuestion: React.FC<ChatTestQuestionProps> = ({
         {!submitted ? (
           <Button 
             onClick={handleSubmit}
-            disabled={!answer}
+            disabled={!answer || disabled}
             className="w-full"
           >
             Submit Answer
@@ -115,6 +169,7 @@ const ChatTestQuestion: React.FC<ChatTestQuestionProps> = ({
             <Button 
               onClick={handleNext}
               className="w-full"
+              disabled={disabled}
             >
               <ArrowRight className="h-4 w-4 mr-2" />
               Continue

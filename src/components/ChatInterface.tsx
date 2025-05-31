@@ -9,8 +9,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
 import { useChatContext } from '@/contexts/ChatContext';
-import GrammarCardDisplay from './chat/GrammarCardDisplay';
-import ChatTestQuestion from './chat/ChatTestQuestion';
 
 interface Message {
   id: string;
@@ -31,13 +29,7 @@ const ChatInterface = () => {
   const { user } = useAuth();
   const { profile, updateProfile } = useProfile();
   const { 
-    currentTopic,
-    currentQuestion,
-    isTesting,
-    chatDisabled,
-    setAiResponse,
-    handleTestAnswer,
-    completeTest
+    chatDisabled
   } = useChatContext();
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -207,23 +199,23 @@ const ChatInterface = () => {
           message: userMessage.content,
           context: {
             userLevel: profile?.level || 'A1',
-            currentTopic: currentTopic?.name,
-            isTestActive: isTesting,
-            userTestAnswer: isTesting ? userMessage.content : null,
-            currentQuestion: isTesting ? currentQuestion : null,
-            user_id: user?.id,
             chatHistory: messages.slice(-5).map(m => ({
               role: m.sender === 'user' ? 'user' : 'assistant',
               content: m.content
-            }))
+            })),
+            user_id: user?.id
           }
         }
       });
 
       if (error) throw error;
 
-      // Process AI response
-      setAiResponse(data);
+      // Process AI response through context
+      if (data) {
+        const { useChatContext } = await import('@/contexts/ChatContext');
+        const { setAiResponse } = useChatContext();
+        setAiResponse(data);
+      }
 
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -240,6 +232,7 @@ const ChatInterface = () => {
 
       await saveChatMessage(aiMessage);
 
+      // Update user XP if corrections were made
       if (data.corrections?.length > 0 && profile) {
         const xpGain = data.corrections.length * 5;
         await updateProfile({ xp: (profile.xp || 0) + xpGain });
@@ -266,39 +259,8 @@ const ChatInterface = () => {
     }
   };
 
-  const onTestAnswer = (answer: string) => {
-    if (!currentQuestion) return;
-    
-    handleTestAnswer(answer);
-  };
-
   return (
     <div className="max-w-4xl mx-auto h-[600px] flex flex-col">
-      {/* Grammar Card Display */}
-      {currentTopic && (
-        <GrammarCardDisplay
-          topic={currentTopic.name}
-          level={currentTopic.level}
-          explanation={currentTopic.description}
-          examples={currentTopic.examples}
-          situations={currentTopic.situations}
-          rulesChange={currentTopic.rulesChange}
-        />
-      )}
-
-      {/* Test Question Display */}
-      {isTesting && currentQuestion && (
-        <ChatTestQuestion
-          question={currentQuestion.question}
-          type={currentQuestion.type}
-          options={currentQuestion.options}
-          correctAnswer={currentQuestion.correctAnswer}
-          explanation={currentQuestion.explanation}
-          onAnswer={onTestAnswer}
-          onComplete={completeTest}
-        />
-      )}
-
       <Card className="flex-1 flex flex-col">
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">

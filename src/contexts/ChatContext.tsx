@@ -28,6 +28,14 @@ interface TestQuestion {
   topicId?: string; // UUID of the related topic
 }
 
+interface UiElement {
+  id: string;
+  type: 'grammarCard' | 'testQuestion';
+  data: any;
+  status?: 'active' | 'feedbackDisplayed' | 'completed';
+  timestamp: Date;
+}
+
 interface ChatContextType {
   currentTopic: GrammarTopic | null;
   currentQuestion: TestQuestion | null;
@@ -38,9 +46,12 @@ interface ChatContextType {
     totalQuestions: number;
     masteredTopics: string[];
   };
+  displayedUiElements: UiElement[];
+  currentActiveUiElementId: string | null;
   setAiResponse: (response: any) => void;
   handleTestAnswer: (answer: string) => void;
   completeTest: () => void;
+  advanceTestQuestion: (id: string) => void;
 }
 
 const ChatContext = createContext<ChatContextType | null>(null);
@@ -66,6 +77,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     totalQuestions: 0,
     masteredTopics: [] as string[]
   });
+  const [displayedUiElements, setDisplayedUiElements] = useState<UiElement[]>([]);
+  const [currentActiveUiElementId, setCurrentActiveUiElementId] = useState<string | null>(null);
 
   // Process AI response and update state accordingly
   const setAiResponse = (response: any) => {
@@ -73,17 +86,38 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Update grammar card if provided
     if (response.grammarCard) {
+      const grammarCardElement: UiElement = {
+        id: `grammar-${Date.now()}`,
+        type: 'grammarCard',
+        data: response.grammarCard,
+        timestamp: new Date()
+      };
+      
       setCurrentTopic(response.grammarCard);
+      setDisplayedUiElements(prev => [...prev, grammarCardElement]);
     }
 
     // Update test question if provided
     if (response.testQuestion) {
+      const testQuestionId = `test-${Date.now()}`;
+      const testQuestionElement: UiElement = {
+        id: testQuestionId,
+        type: 'testQuestion',
+        data: response.testQuestion,
+        status: 'active',
+        timestamp: new Date()
+      };
+      
       setCurrentQuestion(response.testQuestion);
       setIsTesting(true);
       setChatDisabled(true);
-    } else {
+      setCurrentActiveUiElementId(testQuestionId);
+      setDisplayedUiElements(prev => [...prev, testQuestionElement]);
+    } else if (response.isTestActive === false && isTesting) {
+      // Test is no longer active
       setIsTesting(false);
       setChatDisabled(false);
+      setCurrentActiveUiElementId(null);
     }
 
     // Update progress if provided
@@ -124,20 +158,40 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
     }
 
+    // Update UI elements
+    if (currentActiveUiElementId) {
+      setDisplayedUiElements(prev => 
+        prev.map(element => 
+          element.id === currentActiveUiElementId 
+            ? {
+                ...element,
+                data: {
+                  ...element.data,
+                  userAnswer: answer,
+                  isCorrect,
+                  feedback: currentQuestion.explanation
+                },
+                status: 'feedbackDisplayed'
+              }
+            : element
+        )
+      );
+    }
+
     // Update user skills if we have a topic
-    if (currentTopic && user && currentTopic.id) { // Ensure we have a valid topic ID
+    if (currentTopic && user && currentTopic.id) {
       try {
         // Check if skill exists
         const { data: existingSkill } = await supabase
           .from('user_skills')
           .select('*')
           .eq('user_id', user.id)
-          .eq('topic_id', currentTopic.id) // Use the UUID instead of name
+          .eq('topic_id', currentTopic.id)
           .maybeSingle();
 
         const skillUpdate = {
           user_id: user.id,
-          topic_id: currentTopic.id, // Use the UUID instead of name
+          topic_id: currentTopic.id,
           skill_level: existingSkill 
             ? Math.min(1, existingSkill.skill_level + (isCorrect ? 0.1 : -0.05))
             : isCorrect ? 0.6 : 0.4,
@@ -159,6 +213,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error('Error updating user skills:', error);
       }
     }
+
+    // Reset testing state
+    setIsTesting(false);
+    setChatDisabled(false);
+    setCurrentActiveUiElementId(null);
   };
 
   // Complete the current test
@@ -166,6 +225,18 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsTesting(false);
     setChatDisabled(false);
     setCurrentQuestion(null);
+    setCurrentActiveUiElementId(null);
+  };
+
+  // Advance to next question or mark as completed
+  const advanceTestQuestion = (id: string) => {
+    setDisplayedUiElements(prev => 
+      prev.map(element => 
+        element.id === id 
+          ? { ...element, status: 'completed' }
+          : element
+      )
+    );
   };
 
   const value = {
@@ -174,9 +245,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     isTesting,
     chatDisabled,
     userProgress,
+    displayedUiElements,
+    currentActiveUiElementId,
     setAiResponse,
     handleTestAnswer,
-    completeTest
+    completeTest,
+    advanceTestQuestion
   };
 
   return (
