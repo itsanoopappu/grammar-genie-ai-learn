@@ -169,7 +169,7 @@ async function generateExercises(supabaseClient, topicId) {
             content: {
               question: text,
               options: [] (for multiple-choice),
-              correct_answer: string,
+              correctAnswer: string,
               explanation: string
             },
             difficulty_level: 1-10
@@ -182,12 +182,19 @@ async function generateExercises(supabaseClient, topicId) {
   const aiData = await openAIResponse.json()
   const exercises = JSON.parse(aiData.choices[0].message.content)
 
-  // Insert exercises into database
+  // Insert exercises into database with properly structured content
   const { data, error } = await supabaseClient
     .from('exercises')
     .insert(exercises.map(ex => ({
       ...ex,
-      topic_id: topicId
+      topic_id: topicId,
+      content: {
+        ...ex.content,
+        // Ensure correct_answer is mapped to correctAnswer if it exists in the original format
+        correctAnswer: ex.content.correct_answer || ex.content.correctAnswer,
+        // Remove the snake_case version if it exists
+        correct_answer: undefined
+      }
     })))
     .select()
 
