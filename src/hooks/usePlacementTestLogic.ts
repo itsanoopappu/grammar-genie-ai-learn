@@ -1,3 +1,4 @@
+
 import { atom, useAtom } from 'jotai';
 import { produce } from 'immer';
 import { supabase } from '@/integrations/supabase/client';
@@ -9,17 +10,23 @@ interface Question {
   options: string[];
   correct: string;
   topic: string;
+  level: string;
   explanation: string;
 }
 
 interface TestResults {
   score: number;
-  total: number;
+  total?: number;
   recommendedLevel: string;
   topicPerformance: Record<string, { correct: number; total: number }>;
-  weakTopics: string[];
-  strongTopics: string[];
-  detailedFeedback: string[];
+  levelBreakdown: Record<string, number>;
+  weaknesses: string[];
+  strengths: string[];
+  xpEarned: number;
+  detailedFeedback: {
+    message: string;
+    nextSteps: string[];
+  };
 }
 
 interface TestState {
@@ -28,13 +35,15 @@ interface TestState {
   currentQuestion: number;
   selectedAnswer: string;
   questions: Question[];
-  userAnswers: string[];
+  userAnswers: Record<string, string>;
   testCompleted: boolean;
   testResults: TestResults | null;
   loading: boolean;
-  testType: 'Standard' | 'Adaptive';
+  error: string | null;
+  testType: 'quick' | 'comprehensive';
   timeSpent: number;
   startTime: Date | null;
+  estimatedTime: number;
 }
 
 const initialState: TestState = {
@@ -43,13 +52,15 @@ const initialState: TestState = {
   currentQuestion: 0,
   selectedAnswer: '',
   questions: [],
-  userAnswers: [],
+  userAnswers: {},
   testCompleted: false,
   testResults: null,
   loading: false,
-  testType: 'Adaptive',
+  error: null,
+  testType: 'quick',
   timeSpent: 0,
-  startTime: null
+  startTime: null,
+  estimatedTime: 5
 };
 
 const testStateAtom = atom<TestState>(initialState);
@@ -59,15 +70,20 @@ export const usePlacementTestLogic = () => {
   const { user } = useAuth();
   const { profile, updateProfile } = useProfile();
 
-  const startTest = async () => {
-    setState(produce(state => { state.loading = true }));
+  const startTest = async (testType: 'quick' | 'comprehensive' = 'quick') => {
+    setState(produce(state => { 
+      state.loading = true;
+      state.error = null;
+      state.testType = testType;
+    }));
+
     try {
       const { data, error } = await supabase.functions.invoke('placement-test', {
         body: { 
           action: 'generate',
           level: profile?.level || 'A2',
-          adaptive: state.testType === 'Adaptive',
-          user_id: user?.id
+          user_id: user?.id,
+          test_type: testType
         }
       });
 
@@ -78,20 +94,25 @@ export const usePlacementTestLogic = () => {
         state.questions = data.questions;
         state.testStarted = true;
         state.currentQuestion = 0;
-        state.userAnswers = [];
+        state.userAnswers = {};
         state.testCompleted = false;
         state.startTime = new Date();
         state.timeSpent = 0;
+        state.estimatedTime = data.estimatedTime || (testType === 'quick' ? 5 : 15);
         state.loading = false;
       }));
-    } catch (error) {
-      console.error('Error starting test:', error);
-      setState(produce(state => { state.loading = false }));
+    } catch (error: any) {
+      setState(produce(state => { 
+        state.loading = false;
+        state.error = error.message || 'Failed to start test. Please try again.';
+      }));
     }
   };
 
   const submitAnswer = async () => {
-    const newAnswers = [...state.userAnswers, state.selectedAnswer];
+    if (!state.selectedAnswer) return;
+
+    const newAnswers = { ...state.userAnswers, [state.questions[state.currentQuestion].question]: state.selectedAnswer };
     
     setState(produce(state => {
       state.userAnswers = newAnswers;
@@ -103,44 +124,51 @@ export const usePlacementTestLogic = () => {
         state.currentQuestion += 1;
       }));
     } else {
-      // Test completed - evaluate results
-      setState(produce(state => { state.loading = true }));
-      try {
-        const answersWithQuestions = state.questions.map((q, index) => ({
-          question: q.question,
-          userAnswer: newAnswers[index],
-          correctAnswer: q.correct,
-          topic: q.topic,
-          explanation: q.explanation
-        }));
+      await completeTest(newAnswers);
+    }
+  };
 
-        const { data, error } = await supabase.functions.invoke('placement-test', {
-          body: { 
-            action: 'evaluate',
-            answers: answersWithQuestions,
-            test_id: state.testId
-          }
-        });
+  const completeTest = async (finalAnswers: Record<string, string>) => {
+    setState(produce(state => { 
+      state.loading = true;
+      state.error = null;
+    }));
 
-        if (error) throw error;
-        
-        setState(produce(state => {
-          state.testResults = data;
-          state.testCompleted = true;
-          state.loading = false;
-        }));
-
-        // Update user profile if new level is higher
-        if (shouldUpdateLevel(profile?.level, data.recommendedLevel)) {
-          await updateProfile({ 
-            level: data.recommendedLevel,
-            xp: (profile?.xp || 0) + 50
-          });
+    try {
+      const { data, error } = await supabase.functions.invoke('placement-test', {
+        body: { 
+          action: 'evaluate',
+          answers: finalAnswers,
+          test_id: state.testId
         }
-      } catch (error) {
-        console.error('Error evaluating test:', error);
-        setState(produce(state => { state.loading = false }));
+      });
+
+      if (error) throw error;
+      
+      setState(produce(state => {
+        state.testResults = data;
+        state.testCompleted = true;
+        state.loading = false;
+      }));
+
+      // Update user profile with new level and XP
+      if (profile && data.recommendedLevel && data.xpEarned) {
+        const shouldUpdateLevel = shouldUpgradeLevel(profile.level, data.recommendedLevel);
+        const updates: any = {
+          xp: (profile.xp || 0) + data.xpEarned
+        };
+        
+        if (shouldUpdateLevel) {
+          updates.level = data.recommendedLevel;
+        }
+        
+        await updateProfile(updates);
       }
+    } catch (error: any) {
+      setState(produce(state => { 
+        state.loading = false;
+        state.error = error.message || 'Failed to complete test. Please try again.';
+      }));
     }
   };
 
@@ -148,12 +176,17 @@ export const usePlacementTestLogic = () => {
     setState(initialState);
   };
 
-  const setTestType = (type: 'Standard' | 'Adaptive') => {
-    setState(produce(state => { state.testType = type }));
-  };
-
   const setSelectedAnswer = (answer: string) => {
     setState(produce(state => { state.selectedAnswer = answer }));
+  };
+
+  const previousQuestion = () => {
+    if (state.currentQuestion > 0) {
+      setState(produce(state => {
+        state.currentQuestion -= 1;
+        state.selectedAnswer = state.userAnswers[state.questions[state.currentQuestion - 1].question] || '';
+      }));
+    }
   };
 
   return {
@@ -161,12 +194,12 @@ export const usePlacementTestLogic = () => {
     startTest,
     submitAnswer,
     resetTest,
-    setTestType,
-    setSelectedAnswer
+    setSelectedAnswer,
+    previousQuestion
   };
 };
 
-function shouldUpdateLevel(currentLevel: string, newLevel: string): boolean {
+function shouldUpgradeLevel(currentLevel: string | null, newLevel: string): boolean {
   const levelOrder = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
   const currentIndex = levelOrder.indexOf(currentLevel || 'A1');
   const newIndex = levelOrder.indexOf(newLevel);

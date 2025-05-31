@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import "https://deno.land/x/xhr@0.1.0/mod.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -7,15 +8,132 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Validate required environment variables
-const validateEnv = () => {
-  const required = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'OPENAI_API_KEY'];
-  const missing = required.filter(key => !Deno.env.get(key));
-  
-  if (missing.length > 0) {
-    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+// Pre-generated questions for faster loading
+const QUICK_ASSESSMENT_QUESTIONS = [
+  {
+    question: "Choose the correct sentence:",
+    options: ["I am going to school", "I going to school", "I go to school yesterday", "I will went to school"],
+    correct: "I am going to school",
+    topic: "Basic Present Continuous",
+    level: "A1",
+    explanation: "Present continuous uses 'am/is/are + verb-ing' for actions happening now."
+  },
+  {
+    question: "Complete: She _____ finished her homework.",
+    options: ["have", "has", "had", "having"],
+    correct: "has",
+    topic: "Present Perfect",
+    level: "A2",
+    explanation: "Use 'has' with third person singular (she/he/it) in present perfect."
+  },
+  {
+    question: "If I _____ rich, I would travel the world.",
+    options: ["am", "was", "were", "will be"],
+    correct: "were",
+    topic: "Conditionals",
+    level: "B1",
+    explanation: "Second conditional uses 'were' for all persons after 'if'."
+  },
+  {
+    question: "The report _____ by the deadline.",
+    options: ["must complete", "must be completed", "must completing", "must to complete"],
+    correct: "must be completed",
+    topic: "Passive Voice",
+    level: "B2",
+    explanation: "Passive voice with modal verbs: modal + be + past participle."
+  },
+  {
+    question: "Had I known about the meeting, I _____ attended.",
+    options: ["would have", "will have", "had", "would"],
+    correct: "would have",
+    topic: "Third Conditional",
+    level: "C1",
+    explanation: "Third conditional: Had + subject + past participle, subject + would have + past participle."
   }
-}
+];
+
+const COMPREHENSIVE_QUESTIONS = {
+  A1: [
+    {
+      question: "What _____ your name?",
+      options: ["is", "are", "am", "be"],
+      correct: "is",
+      topic: "Verb To Be",
+      explanation: "Use 'is' with singular subjects like 'name'."
+    },
+    {
+      question: "I _____ from Spain.",
+      options: ["am", "is", "are", "be"],
+      correct: "am",
+      topic: "Verb To Be",
+      explanation: "Use 'am' with 'I'."
+    }
+  ],
+  A2: [
+    {
+      question: "Yesterday I _____ to the cinema.",
+      options: ["go", "went", "going", "goes"],
+      correct: "went",
+      topic: "Past Simple",
+      explanation: "Past simple of 'go' is 'went'."
+    },
+    {
+      question: "She _____ watching TV right now.",
+      options: ["is", "are", "am", "be"],
+      correct: "is",
+      topic: "Present Continuous",
+      explanation: "Present continuous: is/am/are + verb-ing."
+    }
+  ],
+  B1: [
+    {
+      question: "I _____ never been to Paris.",
+      options: ["have", "has", "had", "am"],
+      correct: "have",
+      topic: "Present Perfect",
+      explanation: "Present perfect with 'I' uses 'have'."
+    },
+    {
+      question: "If it rains tomorrow, we _____ stay inside.",
+      options: ["will", "would", "shall", "should"],
+      correct: "will",
+      topic: "First Conditional",
+      explanation: "First conditional: if + present, will + infinitive."
+    }
+  ],
+  B2: [
+    {
+      question: "The house _____ built in 1990.",
+      options: ["is", "was", "has", "had"],
+      correct: "was",
+      topic: "Passive Voice",
+      explanation: "Past passive: was/were + past participle."
+    },
+    {
+      question: "I wish I _____ more time to study.",
+      options: ["have", "had", "has", "having"],
+      correct: "had",
+      topic: "Subjunctive",
+      explanation: "Wish + past simple for present situations."
+    }
+  ],
+  C1: [
+    {
+      question: "_____ the weather been better, we would have gone hiking.",
+      options: ["Had", "Has", "Have", "If"],
+      correct: "Had",
+      topic: "Inversion",
+      explanation: "Inverted third conditional starts with 'Had'."
+    },
+    {
+      question: "She speaks English _____ she were a native speaker.",
+      options: ["as if", "like", "such as", "as"],
+      correct: "as if",
+      topic: "Comparisons",
+      explanation: "'As if' is used for hypothetical comparisons."
+    }
+  ]
+};
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -23,24 +141,20 @@ serve(async (req) => {
   }
 
   try {
-    // Validate environment variables before proceeding
-    validateEnv();
-
-    const { action, level = 'A2', adaptive = false, user_id, answers, test_id } = await req.json()
-
-    // Initialize Supabase client
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
+    const { action, level = 'A2', user_id, answers, test_id, test_type = 'quick' } = await req.json()
+
     if (action === 'generate') {
-      // First create a new test entry
+      // Create test entry
       const { data: testData, error: testError } = await supabaseClient
         .from('placement_tests')
         .insert({
           user_id,
-          test_type: adaptive ? 'adaptive' : 'standard',
+          test_type: test_type === 'comprehensive' ? 'comprehensive' : 'quick',
           started_at: new Date().toISOString()
         })
         .select()
@@ -50,64 +164,75 @@ serve(async (req) => {
         throw new Error(`Failed to create test entry: ${testError.message}`);
       }
 
-      const testId = testData.id
-
-      // Generate questions using OpenAI
-      const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4',
-          messages: [
-            {
-              role: 'system',
-              content: `You are an expert English grammar assessment system. Generate 10 grammar questions suitable for ${level} level students.`
-            },
-            {
-              role: 'user',
-              content: `Generate questions in this JSON format:
+      let questions = [];
+      
+      if (test_type === 'quick') {
+        // Use pre-generated questions for speed
+        questions = QUICK_ASSESSMENT_QUESTIONS;
+      } else {
+        // Generate comprehensive questions using AI
+        const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'gpt-4o-mini',
+            messages: [
               {
-                "questions": [
-                  {
-                    "question": "question text",
-                    "options": ["option1", "option2", "option3", "option4"],
-                    "correct": "correct option",
-                    "topic": "grammar topic",
-                    "explanation": "explanation of the correct answer"
-                  }
-                ]
-              }`
-            }
-          ],
-          temperature: 0.7
-        })
-      }).catch(error => {
-        throw new Error(`OpenAI API request failed: ${error.message}`);
-      });
+                role: 'system',
+                content: `Generate 15 English grammar assessment questions spanning levels A1-C1. Include varied question types: multiple choice, fill-in-the-blank, and error correction. Focus on: tenses, conditionals, passive voice, reported speech, modal verbs, and complex sentence structures.`
+              },
+              {
+                role: 'user',
+                content: `Create questions in this format:
+                {
+                  "questions": [
+                    {
+                      "question": "question text",
+                      "options": ["option1", "option2", "option3", "option4"],
+                      "correct": "correct option",
+                      "topic": "grammar topic",
+                      "level": "A1|A2|B1|B2|C1",
+                      "explanation": "explanation"
+                    }
+                  ]
+                }`
+              }
+            ],
+            temperature: 0.3
+          })
+        });
 
-      if (!openAIResponse.ok) {
-        const errorData = await openAIResponse.text();
-        throw new Error(`OpenAI API error (${openAIResponse.status}): ${errorData}`);
+        if (openAIResponse.ok) {
+          const aiData = await openAIResponse.json();
+          questions = JSON.parse(aiData.choices[0].message.content).questions;
+        } else {
+          // Fallback to comprehensive pre-generated questions
+          questions = [
+            ...COMPREHENSIVE_QUESTIONS.A1,
+            ...COMPREHENSIVE_QUESTIONS.A2,
+            ...COMPREHENSIVE_QUESTIONS.B1,
+            ...COMPREHENSIVE_QUESTIONS.B2,
+            ...COMPREHENSIVE_QUESTIONS.C1
+          ];
+        }
       }
 
-      const aiData = await openAIResponse.json();
-      const generatedQuestions = JSON.parse(aiData.choices[0].message.content).questions;
-
-      // Store questions in database
+      // Store questions
       const { error: questionsError } = await supabaseClient
         .from('test_questions')
         .insert(
-          generatedQuestions.map((q: any) => ({
-            test_id: testId,
+          questions.map((q: any, index: number) => ({
+            test_id: testData.id,
             question: q.question,
             options: q.options,
             correct_answer: q.correct,
             topic: q.topic,
             explanation: q.explanation,
-            level
+            level: q.level || level,
+            question_order: index
           }))
         )
 
@@ -117,64 +242,75 @@ serve(async (req) => {
 
       return new Response(
         JSON.stringify({ 
-          questions: generatedQuestions,
-          testId
+          questions,
+          testId: testData.id,
+          estimatedTime: test_type === 'quick' ? 5 : 15
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
     if (action === 'evaluate') {
-      if (!test_id || !answers) {
-        throw new Error('Missing required parameters: test_id and answers are required');
-      }
-
-      // Get test questions
       const { data: questions, error: questionsError } = await supabaseClient
         .from('test_questions')
         .select('*')
-        .eq('test_id', test_id);
+        .eq('test_id', test_id)
+        .order('question_order');
 
       if (questionsError) {
-        throw new Error(`Failed to fetch test questions: ${questionsError.message}`);
+        throw new Error(`Failed to fetch questions: ${questionsError.message}`);
       }
 
-      // Calculate results
-      const score = questions.reduce((acc, q) => {
-        return acc + (answers[q.id] === q.correct_answer ? 1 : 0);
-      }, 0);
+      // Enhanced scoring algorithm
+      let totalScore = 0;
+      let levelScores = { A1: 0, A2: 0, B1: 0, B2: 0, C1: 0, C2: 0 };
+      let topicPerformance: Record<string, { correct: number; total: number }> = {};
       
-      const percentage = (score / questions.length) * 100;
-      
-      let recommendedLevel = 'A1';
-      if (percentage >= 90) recommendedLevel = 'C1';
-      else if (percentage >= 80) recommendedLevel = 'B2';
-      else if (percentage >= 70) recommendedLevel = 'B1';
-      else if (percentage >= 60) recommendedLevel = 'A2';
+      questions.forEach((q: any) => {
+        const userAnswer = answers[q.id] || answers[q.question] || '';
+        const isCorrect = userAnswer.toLowerCase().trim() === q.correct_answer.toLowerCase().trim();
+        
+        if (isCorrect) {
+          totalScore++;
+          levelScores[q.level as keyof typeof levelScores]++;
+        }
+        
+        if (!topicPerformance[q.topic]) {
+          topicPerformance[q.topic] = { correct: 0, total: 0 };
+        }
+        topicPerformance[q.topic].total++;
+        if (isCorrect) {
+          topicPerformance[q.topic].correct++;
+        }
+      });
 
-      // Group questions by topic for analysis
-      const topicResults = questions.reduce((acc, q) => {
-        if (!acc[q.topic]) {
-          acc[q.topic] = { correct: 0, total: 0 };
-        }
-        acc[q.topic].total++;
-        if (answers[q.id] === q.correct_answer) {
-          acc[q.topic].correct++;
-        }
-        return acc;
-      }, {});
+      const percentage = (totalScore / questions.length) * 100;
+      
+      // Advanced level determination
+      let recommendedLevel = 'A1';
+      if (levelScores.C1 >= 2) recommendedLevel = 'C1';
+      else if (levelScores.B2 >= 2 && percentage >= 70) recommendedLevel = 'B2';
+      else if (levelScores.B1 >= 2 && percentage >= 60) recommendedLevel = 'B1';
+      else if (levelScores.A2 >= 2 && percentage >= 50) recommendedLevel = 'A2';
+      else if (percentage >= 40) recommendedLevel = 'A1';
 
       // Analyze strengths and weaknesses
-      const strengths = [];
-      const weaknesses = [];
-      Object.entries(topicResults).forEach(([topic, result]: [string, any]) => {
+      const strengths: string[] = [];
+      const weaknesses: string[] = [];
+      
+      Object.entries(topicPerformance).forEach(([topic, result]) => {
         const topicScore = (result.correct / result.total) * 100;
-        if (topicScore >= 80) {
+        if (topicScore >= 75) {
           strengths.push(topic);
-        } else if (topicScore <= 60) {
+        } else if (topicScore <= 50) {
           weaknesses.push(topic);
         }
       });
+
+      // Calculate XP reward
+      const baseXP = test_type === 'comprehensive' ? 100 : 50;
+      const bonusXP = Math.floor(percentage / 10) * 5;
+      const totalXP = baseXP + bonusXP;
 
       // Update test completion
       const { error: updateError } = await supabaseClient
@@ -187,8 +323,32 @@ serve(async (req) => {
         .eq('id', test_id);
 
       if (updateError) {
-        throw new Error(`Failed to update test completion: ${updateError.message}`);
+        throw new Error(`Failed to update test: ${updateError.message}`);
       }
+
+      // Store assessment results
+      await supabaseClient
+        .from('assessment_results')
+        .insert({
+          user_id,
+          assessment_type: `placement_${test_type}`,
+          overall_score: percentage,
+          recommended_level: recommendedLevel,
+          topics_assessed: Object.keys(topicPerformance),
+          strengths,
+          weaknesses,
+          detailed_analysis: {
+            levelScores,
+            topicPerformance,
+            totalQuestions: questions.length,
+            totalCorrect: totalScore
+          },
+          next_steps: [
+            `Focus on ${weaknesses.slice(0, 3).join(', ')} for improvement`,
+            `Continue practicing ${recommendedLevel} level content`,
+            'Take another assessment in 2-3 weeks to track progress'
+          ]
+        });
 
       return new Response(
         JSON.stringify({
@@ -196,13 +356,17 @@ serve(async (req) => {
           recommendedLevel,
           strengths,
           weaknesses,
-          topicsAssessed: Object.keys(topicResults),
-          detailedAnalysis: topicResults,
-          nextSteps: [
-            'Review the topics listed in your weaknesses',
-            'Practice exercises focusing on your weak areas',
-            'Consider taking another test in 2-3 weeks to track progress'
-          ]
+          topicPerformance,
+          levelBreakdown: levelScores,
+          xpEarned: totalXP,
+          detailedFeedback: {
+            message: `Great job! You scored ${Math.round(percentage)}% and demonstrated ${recommendedLevel} level proficiency.`,
+            nextSteps: [
+              `Your strongest areas: ${strengths.slice(0, 3).join(', ') || 'Building foundation'}`,
+              `Areas for improvement: ${weaknesses.slice(0, 3).join(', ') || 'Continue current level'}`,
+              'Practice regularly with Smart Practice recommendations'
+            ]
+          }
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
@@ -214,11 +378,11 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('Error:', error);
+    console.error('Placement test error:', error);
     return new Response(
       JSON.stringify({ 
         error: error.message,
-        details: 'If this error persists, please ensure all required environment variables are set in your Supabase project settings.'
+        details: 'Please check your connection and try again.'
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 

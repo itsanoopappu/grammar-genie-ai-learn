@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,11 +18,27 @@ const SmartPractice: React.FC<SmartPracticeProps> = ({ onSelectTopic }) => {
   const { topicRecommendations, loading: topicsLoading, getTopicRecommendations } = useIntelligentTutor();
   const { drillRecommendations, loading: drillsLoading, getDrillRecommendations, startDrill } = useSmartPractice();
   const [activeSubTab, setActiveSubTab] = useState('personalized');
+  const [hasCompletedAssessment, setHasCompletedAssessment] = useState(false);
 
   useEffect(() => {
     getTopicRecommendations();
     getDrillRecommendations();
+    checkAssessmentHistory();
   }, []);
+
+  const checkAssessmentHistory = async () => {
+    // Check if user has completed any assessments to show more relevant recommendations
+    try {
+      const { data } = await supabase
+        .from('assessment_results')
+        .select('id')
+        .limit(1);
+      
+      setHasCompletedAssessment(!!data && data.length > 0);
+    } catch (error) {
+      console.error('Error checking assessment history:', error);
+    }
+  };
 
   const loading = topicsLoading || drillsLoading;
 
@@ -89,6 +104,31 @@ const SmartPractice: React.FC<SmartPracticeProps> = ({ onSelectTopic }) => {
 
   return (
     <div className="space-y-6">
+      {/* Show assessment prompt if no assessment completed */}
+      {!hasCompletedAssessment && (
+        <Card className="bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200">
+          <CardContent className="p-6">
+            <div className="flex items-center space-x-4">
+              <Target className="h-8 w-8 text-purple-600" />
+              <div className="flex-1">
+                <h3 className="font-semibold text-lg text-purple-800 mb-1">
+                  Get Personalized Recommendations
+                </h3>
+                <p className="text-purple-600 text-sm mb-3">
+                  Take a quick assessment to unlock AI-powered practice recommendations tailored to your level.
+                </p>
+                <Button 
+                  onClick={() => window.location.hash = '#assessment'}
+                  className="bg-purple-600 hover:bg-purple-700"
+                >
+                  Take 5-Minute Assessment
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Overview Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
@@ -156,7 +196,7 @@ const SmartPractice: React.FC<SmartPracticeProps> = ({ onSelectTopic }) => {
                 <span>AI-Powered Recommendations</span>
               </CardTitle>
               <CardDescription>
-                Personalized drills based on your learning patterns and performance data
+                Personalized drills based on your assessment results and learning patterns
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -198,14 +238,26 @@ const SmartPractice: React.FC<SmartPracticeProps> = ({ onSelectTopic }) => {
               ) : (
                 <div className="text-center py-12">
                   <Brain className="h-16 w-16 mx-auto mb-4 text-gray-300" />
-                  <h3 className="text-lg font-semibold text-gray-600 mb-2">Building Your Profile</h3>
-                  <p className="text-gray-500 mb-6">Complete some grammar topics or take an assessment to get personalized AI recommendations!</p>
+                  <h3 className="text-lg font-semibold text-gray-600 mb-2">
+                    {hasCompletedAssessment ? 'Building Your Recommendations' : 'Ready for Personalized Learning?'}
+                  </h3>
+                  <p className="text-gray-500 mb-6">
+                    {hasCompletedAssessment 
+                      ? 'Complete some practice sessions to get more AI recommendations!'
+                      : 'Take a quick assessment to unlock personalized AI recommendations tailored to your level!'
+                    }
+                  </p>
                   <div className="flex gap-3 justify-center">
+                    {!hasCompletedAssessment && (
+                      <Button 
+                        onClick={() => window.location.hash = '#assessment'}
+                        className="bg-purple-600 hover:bg-purple-700"
+                      >
+                        Take Assessment
+                      </Button>
+                    )}
                     <Button onClick={() => onSelectTopic('')} variant="outline">
                       Explore Topics
-                    </Button>
-                    <Button onClick={() => window.location.hash = '#assessment'}>
-                      Take Assessment
                     </Button>
                   </div>
                 </div>
