@@ -148,15 +148,12 @@ serve(async (req) => {
     const { action, level = 'A2', user_id, answers, test_id, test_type = 'quick' } = await req.json()
 
     if (action === 'generate') {
-      // Map test_type to valid enum values: 'quick' -> 'standard', 'comprehensive' -> 'adaptive'
-      const dbTestType = test_type === 'quick' ? 'standard' : 'adaptive'
-      
-      // Create test entry with valid enum value
+      // Create test entry with valid enum value - using 'standard' instead of 'assessment'
       const { data: testData, error: testError } = await supabaseClient
         .from('placement_tests')
         .insert({
           user_id,
-          test_type: dbTestType,
+          test_type: 'standard', // Changed to use valid enum value
           started_at: new Date().toISOString()
         })
         .select()
