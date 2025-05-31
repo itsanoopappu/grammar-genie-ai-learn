@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MessageCircle, CheckCircle, Target, BookOpen, TrendingUp } from 'lucide-react';
@@ -30,7 +29,7 @@ const AppContent = () => {
   }
 
   if (!user) {
-    return <AuthPage onAuthSuccess={() => window.location.reload()} />;
+    return <AuthPage onAuthSuccess={() => {}} />;
   }
 
   const handleTopicSelect = (topicId: string) => {
