@@ -194,38 +194,6 @@ export type Database = {
           },
         ]
       }
-      employee_hierarchy: {
-        Row: {
-          department: string
-          id: number
-          name: string
-          parent_id: number | null
-          title: string
-        }
-        Insert: {
-          department: string
-          id?: number
-          name: string
-          parent_id?: number | null
-          title: string
-        }
-        Update: {
-          department?: string
-          id?: number
-          name?: string
-          parent_id?: number | null
-          title?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "employee_hierarchy_parent_id_fkey"
-            columns: ["parent_id"]
-            isOneToOne: false
-            referencedRelation: "employee_hierarchy"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       exercise_attempts: {
         Row: {
           ai_feedback: Json | null
@@ -438,30 +406,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      "Org Data": {
-        Row: {
-          department: string | null
-          id: number
-          name: string | null
-          parent_id: string | null
-          title: string | null
-        }
-        Insert: {
-          department?: string | null
-          id?: number
-          name?: string | null
-          parent_id?: string | null
-          title?: string | null
-        }
-        Update: {
-          department?: string | null
-          id?: number
-          name?: string | null
-          parent_id?: string | null
-          title?: string | null
-        }
-        Relationships: []
       }
       placement_tests: {
         Row: {

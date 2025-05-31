@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -85,6 +86,7 @@ serve(async (req) => {
     )
 
   } catch (error) {
+    console.error('Error in grammar-topics function:', error);
     return new Response(
       JSON.stringify({ error: error.message }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
@@ -139,86 +141,154 @@ async function generateGrammarTopics(supabaseClient) {
 }
 
 async function generateExercises(supabaseClient, topicId) {
-  // Get topic details
-  const { data: topic } = await supabaseClient
-    .from('grammar_topics')
-    .select('*')
-    .eq('id', topicId)
-    .single()
+  try {
+    // Get topic details
+    const { data: topic } = await supabaseClient
+      .from('grammar_topics')
+      .select('*')
+      .eq('id', topicId)
+      .single()
 
-  const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'gpt-4',
-      messages: [
-        {
-          role: 'system',
-          content: 'You are an expert English grammar exercise creator.'
-        },
-        {
-          role: 'user',
-          content: `Create 5 exercises for the topic: ${topic.name} (${topic.level})
-          Include different types (multiple-choice, fill-blank, transformation).
-          Format as JSON array with:
-          {
-            type: exercise type,
-            content: {
-              question: text,
-              options: [] (for multiple-choice),
-              correctAnswer: string,
-              explanation: string
-            },
-            difficulty_level: 1-10
-          }`
-        }
-      ]
-    })
-  })
-
-  const aiData = await openAIResponse.json()
-  let exercises = JSON.parse(aiData.choices[0].message.content)
-
-  // Validate and filter exercises
-  exercises = exercises.filter(exercise => {
-    // Check if exercise has all required properties
-    if (!exercise || typeof exercise !== 'object') return false;
-    if (!exercise.type || typeof exercise.type !== 'string') return false;
-    if (!exercise.content || typeof exercise.content !== 'object') return false;
-    if (!exercise.difficulty_level || typeof exercise.difficulty_level !== 'number') return false;
-
-    // Validate content object
-    const content = exercise.content;
-    if (!content.question || typeof content.question !== 'string') return false;
-    if (!content.correctAnswer && !content.correct_answer) return false;
-
-    // Validate options array for multiple-choice
-    if (exercise.type.toLowerCase() === 'multiple-choice') {
-      if (!Array.isArray(content.options) || content.options.length === 0) return false;
+    if (!topic) {
+      throw new Error('Topic not found');
     }
 
-    return true;
-  });
+    console.log('Generating exercises for topic:', topic.name);
 
-  // Transform and insert valid exercises into database
-  const { data, error } = await supabaseClient
-    .from('exercises')
-    .insert(exercises.map(ex => ({
-      ...ex,
-      topic_id: topicId,
-      content: {
-        ...ex.content,
-        // Ensure correct_answer is mapped to correctAnswer if it exists in the original format
-        correctAnswer: ex.content.correct_answer || ex.content.correctAnswer,
-        // Remove the snake_case version if it exists
-        correct_answer: undefined
+    const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an expert English grammar exercise creator. Always ensure each exercise has a valid correctAnswer field.'
+          },
+          {
+            role: 'user',
+            content: `Create 5 exercises for the topic: ${topic.name} (${topic.level})
+            Include different types (multiple-choice, fill-blank, transformation).
+            IMPORTANT: Always include a correctAnswer field with a non-empty string value.
+            Format as JSON array with:
+            {
+              type: exercise type,
+              content: {
+                question: text,
+                options: [] (for multiple-choice),
+                correctAnswer: string (REQUIRED - never empty),
+                explanation: string
+              },
+              difficulty_level: 1-10
+            }`
+          }
+        ]
+      })
+    })
+
+    if (!openAIResponse.ok) {
+      throw new Error(`OpenAI API error: ${openAIResponse.status}`);
+    }
+
+    const aiData = await openAIResponse.json()
+    let exercises = JSON.parse(aiData.choices[0].message.content)
+
+    console.log('Raw AI exercises:', JSON.stringify(exercises, null, 2));
+
+    // Enhanced validation and filtering
+    exercises = exercises.filter((exercise, index) => {
+      console.log(`Validating exercise ${index}:`, exercise);
+      
+      // Check if exercise has all required properties
+      if (!exercise || typeof exercise !== 'object') {
+        console.log(`Exercise ${index} failed: not an object`);
+        return false;
       }
-    })))
-    .select()
+      
+      if (!exercise.type || typeof exercise.type !== 'string') {
+        console.log(`Exercise ${index} failed: invalid type`);
+        return false;
+      }
+      
+      if (!exercise.content || typeof exercise.content !== 'object') {
+        console.log(`Exercise ${index} failed: invalid content`);
+        return false;
+      }
+      
+      if (!exercise.difficulty_level || typeof exercise.difficulty_level !== 'number') {
+        console.log(`Exercise ${index} failed: invalid difficulty_level`);
+        return false;
+      }
 
-  if (error) throw error
-  return data
+      // Validate content object
+      const content = exercise.content;
+      if (!content.question || typeof content.question !== 'string') {
+        console.log(`Exercise ${index} failed: invalid question`);
+        return false;
+      }
+
+      // Critical: Ensure correctAnswer exists and is a non-empty string
+      let correctAnswer = content.correctAnswer || content.correct_answer;
+      if (!correctAnswer || typeof correctAnswer !== 'string' || correctAnswer.trim() === '') {
+        console.log(`Exercise ${index} failed: missing or invalid correctAnswer`);
+        return false;
+      }
+
+      // Validate options array for multiple-choice
+      if (exercise.type.toLowerCase().includes('multiple') || exercise.type.toLowerCase().includes('choice')) {
+        if (!Array.isArray(content.options) || content.options.length === 0) {
+          console.log(`Exercise ${index} failed: invalid options for multiple choice`);
+          return false;
+        }
+      }
+
+      console.log(`Exercise ${index} passed validation`);
+      return true;
+    });
+
+    console.log(`Filtered to ${exercises.length} valid exercises`);
+
+    if (exercises.length === 0) {
+      throw new Error('No valid exercises were generated');
+    }
+
+    // Transform and insert valid exercises into database
+    const exercisesToInsert = exercises.map(ex => {
+      // Ensure correctAnswer is properly mapped
+      const correctAnswer = ex.content.correctAnswer || ex.content.correct_answer;
+      
+      return {
+        type: ex.type,
+        topic_id: topicId,
+        difficulty_level: ex.difficulty_level,
+        content: {
+          question: ex.content.question,
+          options: ex.content.options || [],
+          correctAnswer: correctAnswer, // Ensure this is always present
+          explanation: ex.content.explanation || 'No explanation provided'
+        }
+      };
+    });
+
+    console.log('Exercises to insert:', JSON.stringify(exercisesToInsert, null, 2));
+
+    const { data, error } = await supabaseClient
+      .from('exercises')
+      .insert(exercisesToInsert)
+      .select()
+
+    if (error) {
+      console.error('Database insert error:', error);
+      throw error;
+    }
+
+    console.log('Successfully inserted exercises:', data);
+    return data;
+  } catch (error) {
+    console.error('Error in generateExercises:', error);
+    throw error;
+  }
 }

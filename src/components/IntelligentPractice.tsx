@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
-import { Loader2, Target, Clock, CheckCircle, XCircle, Lightbulb } from 'lucide-react';
+import { Loader2, Target, Clock, CheckCircle, XCircle, Lightbulb, AlertTriangle } from 'lucide-react';
 
 interface Exercise {
   id: string;
@@ -53,6 +54,8 @@ const IntelligentPractice: React.FC<IntelligentPracticeProps> = ({ topicId }) =>
     setLoading(true);
     setError(null);
     try {
+      console.log('Fetching exercises for topic:', topicId);
+      
       const { data, error } = await supabase.functions.invoke('grammar-topics', {
         body: { 
           action: 'get_exercises',
@@ -60,7 +63,37 @@ const IntelligentPractice: React.FC<IntelligentPracticeProps> = ({ topicId }) =>
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error from edge function:', error);
+        throw error;
+      }
+
+      console.log('Received exercises data:', data);
+
+      if (!data || !data.exercises || data.exercises.length === 0) {
+        throw new Error('No exercises were returned from the server');
+      }
+
+      // Validate exercises data
+      const validExercises = data.exercises.filter((exercise: any) => {
+        if (!exercise || !exercise.content) {
+          console.warn('Invalid exercise structure:', exercise);
+          return false;
+        }
+        
+        if (!exercise.content.correctAnswer) {
+          console.warn('Exercise missing correctAnswer:', exercise);
+          return false;
+        }
+        
+        return true;
+      });
+
+      if (validExercises.length === 0) {
+        throw new Error('No valid exercises found - all exercises are missing required data');
+      }
+
+      console.log(`Using ${validExercises.length} valid exercises out of ${data.exercises.length}`);
 
       // Create a new practice session
       const { data: session, error: sessionError } = await supabase
@@ -74,9 +107,12 @@ const IntelligentPractice: React.FC<IntelligentPracticeProps> = ({ topicId }) =>
         .select()
         .single();
 
-      if (sessionError) throw sessionError;
+      if (sessionError) {
+        console.error('Session creation error:', sessionError);
+        throw sessionError;
+      }
 
-      setExercises(data.exercises);
+      setExercises(validExercises);
       setSessionId(session.id);
       setCurrentExerciseIndex(0);
       setUserAnswer('');
@@ -84,16 +120,27 @@ const IntelligentPractice: React.FC<IntelligentPracticeProps> = ({ topicId }) =>
       setShowFeedback(false);
     } catch (err) {
       console.error('Error fetching exercises:', err);
-      setError('Failed to load exercises. Please try again.');
+      setError(`Failed to load exercises: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
   };
 
   const submitAnswer = async () => {
-    if (!exercises[currentExerciseIndex]) return;
+    const currentExercise = exercises[currentExerciseIndex];
+    if (!currentExercise) {
+      setError('No current exercise available');
+      return;
+    }
 
-    let answer = exercises[currentExerciseIndex].type === 'multiple-choice' 
+    // Defensive check for correctAnswer
+    if (!currentExercise.content?.correctAnswer) {
+      console.error('Current exercise missing correctAnswer:', currentExercise);
+      setError('This exercise has invalid data. Please try the next exercise.');
+      return;
+    }
+
+    let answer = currentExercise.type === 'multiple-choice' 
       ? selectedOption 
       : userAnswer;
 
@@ -102,19 +149,31 @@ const IntelligentPractice: React.FC<IntelligentPracticeProps> = ({ topicId }) =>
       answer = String(answer || '');
     }
 
-    if (!answer.trim()) return;
+    if (!answer.trim()) {
+      setError('Please provide an answer before submitting');
+      return;
+    }
 
     setLoading(true);
+    setError(null);
+
     try {
+      console.log('Submitting answer:', answer);
+      console.log('Correct answer:', currentExercise.content.correctAnswer);
+
+      // Safe comparison with proper null checking
+      const correctAnswer = currentExercise.content.correctAnswer;
+      const isCorrect = answer.toLowerCase().trim() === correctAnswer.toLowerCase().trim();
+
       // Save attempt
       await supabase
         .from('exercise_attempts')
         .insert({
           user_id: user?.id,
-          exercise_id: exercises[currentExerciseIndex].id,
+          exercise_id: currentExercise.id,
           session_id: sessionId,
           user_answer: { answer },
-          is_correct: answer.toLowerCase().trim() === exercises[currentExerciseIndex].content.correctAnswer.toLowerCase().trim()
+          is_correct: isCorrect
         });
 
       // Get AI feedback
@@ -122,14 +181,27 @@ const IntelligentPractice: React.FC<IntelligentPracticeProps> = ({ topicId }) =>
         body: { 
           action: 'evaluate',
           userAnswer: answer,
-          correctAnswer: exercises[currentExerciseIndex].content.correctAnswer,
-          topic: exercises[currentExerciseIndex].content.question
+          correctAnswer: correctAnswer,
+          topic: currentExercise.content.question
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        console.warn('Failed to get AI feedback, using basic feedback:', error);
+        // Provide basic feedback if AI service fails
+        setFeedback({
+          isCorrect,
+          feedback: {
+            message: isCorrect 
+              ? 'Correct! Well done.' 
+              : `Incorrect. The correct answer is: ${correctAnswer}`,
+            tip: currentExercise.content.explanation
+          }
+        });
+      } else {
+        setFeedback(data);
+      }
 
-      setFeedback(data);
       setShowFeedback(true);
 
       // Update session progress
@@ -137,7 +209,7 @@ const IntelligentPractice: React.FC<IntelligentPracticeProps> = ({ topicId }) =>
         .from('practice_sessions')
         .update({
           exercises_attempted: supabase.sql`exercises_attempted + 1`,
-          exercises_correct: data.isCorrect ? supabase.sql`exercises_correct + 1` : supabase.sql`exercises_correct`
+          exercises_correct: isCorrect ? supabase.sql`exercises_correct + 1` : supabase.sql`exercises_correct`
         })
         .eq('id', sessionId);
 
@@ -156,6 +228,7 @@ const IntelligentPractice: React.FC<IntelligentPracticeProps> = ({ topicId }) =>
       setSelectedOption('');
       setShowFeedback(false);
       setFeedback(null);
+      setError(null);
     } else {
       // Complete session
       try {
@@ -184,8 +257,12 @@ const IntelligentPractice: React.FC<IntelligentPracticeProps> = ({ topicId }) =>
 
   if (error) {
     return (
-      <div className="text-center text-red-500 p-4">
-        {error}
+      <div className="text-center p-4">
+        <div className="flex items-center justify-center mb-4">
+          <AlertTriangle className="h-8 w-8 text-red-500 mr-2" />
+          <span className="text-red-500 font-medium">Error</span>
+        </div>
+        <p className="text-red-500 mb-4">{error}</p>
         <Button onClick={fetchExercises} className="mt-4">
           Try Again
         </Button>
@@ -198,6 +275,22 @@ const IntelligentPractice: React.FC<IntelligentPracticeProps> = ({ topicId }) =>
     return (
       <div className="text-center text-gray-500 p-4">
         No exercises available for this topic.
+      </div>
+    );
+  }
+
+  // Additional safety check for exercise data
+  if (!currentExercise.content || !currentExercise.content.correctAnswer) {
+    return (
+      <div className="text-center p-4">
+        <div className="flex items-center justify-center mb-4">
+          <AlertTriangle className="h-8 w-8 text-orange-500 mr-2" />
+          <span className="text-orange-500 font-medium">Invalid Exercise Data</span>
+        </div>
+        <p className="text-gray-600 mb-4">This exercise has incomplete data.</p>
+        <Button onClick={nextExercise} className="mt-4">
+          Skip to Next Exercise
+        </Button>
       </div>
     );
   }
@@ -216,7 +309,7 @@ const IntelligentPractice: React.FC<IntelligentPracticeProps> = ({ topicId }) =>
             <div className="flex items-center space-x-2">
               <Clock className="h-4 w-4 text-gray-500" />
               <span className="text-sm text-gray-600">
-                ~{currentExercise.estimated_time_seconds}s
+                ~{currentExercise.estimated_time_seconds || 60}s
               </span>
             </div>
           </div>
@@ -286,9 +379,9 @@ const IntelligentPractice: React.FC<IntelligentPracticeProps> = ({ topicId }) =>
                 </span>
               </div>
               <p className={feedback.isCorrect ? 'text-green-700' : 'text-red-700'}>
-                {feedback.feedback.message}
+                {feedback.feedback?.message || 'No feedback available'}
               </p>
-              {feedback.feedback.tip && (
+              {feedback.feedback?.tip && (
                 <p className="text-blue-700 mt-2">
                   <Lightbulb className="h-4 w-4 inline mr-1" />
                   {feedback.feedback.tip}
