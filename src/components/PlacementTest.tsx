@@ -115,12 +115,12 @@ const PlacementTest = () => {
         setTestResults(data);
         setTestCompleted(true);
 
-        // Save test results to database
+        // Save test results to database - using lowercase test_type
         await supabase.from('placement_tests').insert({
           user_id: user?.id,
           score: data.score,
           level: data.recommendedLevel,
-          test_type: testType.toUpperCase(),
+          test_type: testType,
           completed_at: new Date().toISOString()
         });
 
