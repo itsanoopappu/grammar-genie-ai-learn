@@ -146,15 +146,15 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { action, level = 'A2', user_id, answers, test_id, test_type = 'quick' } = await req.json()
+    const { action, level = 'A2', user_id, answers, test_id, test_type = 'placement' } = await req.json()
 
     if (action === 'generate') {
-      // Create test entry
+      // Create test entry with valid enum value
       const { data: testData, error: testError } = await supabaseClient
         .from('placement_tests')
         .insert({
           user_id,
-          test_type: test_type === 'comprehensive' ? 'comprehensive' : 'quick',
+          test_type: 'placement', // Use valid enum value
           started_at: new Date().toISOString()
         })
         .select()
@@ -307,7 +307,7 @@ serve(async (req) => {
         }
       });
 
-      // Calculate XP reward
+      // Calculate XP reward based on test type and performance
       const baseXP = test_type === 'comprehensive' ? 100 : 50;
       const bonusXP = Math.floor(percentage / 10) * 5;
       const totalXP = baseXP + bonusXP;
