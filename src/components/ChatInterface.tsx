@@ -1,14 +1,16 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { MessageCircle, Send, Mic, Volume2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 
 interface Message {
-  id: number;
+  id: string;
   sender: 'user' | 'tutor';
   content: string;
   timestamp: Date;
@@ -20,9 +22,10 @@ interface Message {
 }
 
 const ChatInterface = () => {
+  const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([
     {
-      id: 1,
+      id: '1',
       sender: 'tutor',
       content: "Hello! I'm your AI grammar tutor. I'm here to help you improve your English grammar and vocabulary. Feel free to ask me questions or write sentences for me to review!",
       timestamp: new Date()
@@ -30,48 +33,101 @@ const ChatInterface = () => {
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isListening, setIsListening] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
 
-  const handleSendMessage = () => {
-    if (!inputValue.trim()) return;
+  useEffect(() => {
+    if (user) {
+      createChatSession();
+    }
+  }, [user]);
+
+  const createChatSession = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('chat_sessions')
+        .insert({ user_id: user?.id })
+        .select()
+        .single();
+
+      if (error) throw error;
+      setSessionId(data.id);
+    } catch (error) {
+      console.error('Error creating chat session:', error);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!inputValue.trim() || loading) return;
 
     const userMessage: Message = {
-      id: messages.length + 1,
+      id: Date.now().toString(),
       sender: 'user',
       content: inputValue,
       timestamp: new Date()
     };
 
     setMessages(prev => [...prev, userMessage]);
-
-    // Simulate AI response with grammar correction
-    setTimeout(() => {
-      const aiResponse: Message = {
-        id: messages.length + 2,
-        sender: 'tutor',
-        content: "Great sentence! I noticed a few areas where we can improve:",
-        timestamp: new Date(),
-        corrections: [
-          {
-            original: "I go to school yesterday",
-            corrected: "I went to school yesterday",
-            explanation: "Use past tense 'went' for actions that happened in the past"
-          }
-        ]
-      };
-      setMessages(prev => [...prev, aiResponse]);
-    }, 1000);
-
+    setLoading(true);
     setInputValue('');
+
+    try {
+      // Save user message to database
+      await supabase.from('chat_messages').insert({
+        session_id: sessionId,
+        sender: 'user',
+        message: inputValue
+      });
+
+      // Call AI chat function
+      const { data, error } = await supabase.functions.invoke('ai-chat', {
+        body: { message: inputValue, sessionId }
+      });
+
+      if (error) throw error;
+
+      const aiMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        sender: 'tutor',
+        content: data.content,
+        timestamp: new Date(),
+        corrections: data.corrections || []
+      };
+
+      setMessages(prev => [...prev, aiMessage]);
+
+      // Save AI response to database
+      await supabase.from('chat_messages').insert({
+        session_id: sessionId,
+        sender: 'tutor',
+        message: data.content,
+        corrections: data.corrections
+      });
+
+    } catch (error) {
+      console.error('Error sending message:', error);
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        sender: 'tutor',
+        content: "I'm sorry, I'm having trouble right now. Please try again later.",
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleVoiceInput = () => {
     setIsListening(!isListening);
-    // In a real app, this would implement speech-to-text
+    // Voice input implementation would go here
   };
 
   const handleTextToSpeech = (text: string) => {
-    // In a real app, this would implement text-to-speech
-    console.log('Speaking:', text);
+    if ('speechSynthesis' in window) {
+      const utterance = new SpeechSynthesisUtterance(text);
+      speechSynthesis.speak(utterance);
+    }
   };
 
   return (
@@ -106,7 +162,7 @@ const ChatInterface = () => {
                     <div className="mb-1">{message.content}</div>
                     
                     {/* Grammar Corrections */}
-                    {message.corrections && (
+                    {message.corrections && message.corrections.length > 0 && (
                       <div className="mt-3 space-y-2">
                         {message.corrections.map((correction, index) => (
                           <div key={index} className="bg-white p-3 rounded border-l-4 border-red-400">
@@ -137,6 +193,13 @@ const ChatInterface = () => {
                   </div>
                 </div>
               ))}
+              {loading && (
+                <div className="flex justify-start">
+                  <div className="bg-gray-100 px-4 py-2 rounded-lg">
+                    <div className="text-sm text-gray-500">AI is typing...</div>
+                  </div>
+                </div>
+              )}
             </div>
           </ScrollArea>
 
@@ -148,6 +211,7 @@ const ChatInterface = () => {
               placeholder="Type your message or question here..."
               onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
               className="flex-1"
+              disabled={loading}
             />
             <Button
               variant="outline"
@@ -157,7 +221,7 @@ const ChatInterface = () => {
             >
               <Mic className="h-4 w-4" />
             </Button>
-            <Button onClick={handleSendMessage}>
+            <Button onClick={handleSendMessage} disabled={loading}>
               <Send className="h-4 w-4" />
             </Button>
           </div>

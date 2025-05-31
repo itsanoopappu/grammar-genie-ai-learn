@@ -1,32 +1,42 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { BookOpen, MessageCircle, User, Calendar, Trophy, Zap, Target, CheckCircle } from 'lucide-react';
+import { BookOpen, MessageCircle, User, CheckCircle, Trophy, Zap, Target } from 'lucide-react';
 import ChatInterface from '@/components/ChatInterface';
 import PlacementTest from '@/components/PlacementTest';
 import UserProfile from '@/components/UserProfile';
 import DrillRecommendations from '@/components/DrillRecommendations';
+import AuthPage from '@/components/AuthPage';
+import { AuthProvider, useAuth } from '@/hooks/useAuth';
+import { useProfile } from '@/hooks/useProfile';
 
-const Index = () => {
+const AppContent = () => {
+  const { user, loading: authLoading } = useAuth();
+  const { profile, loading: profileLoading } = useProfile();
   const [activeTab, setActiveTab] = useState('dashboard');
-  
-  // Mock user data - in real app this would come from Supabase
-  const userData = {
-    username: 'Alex',
-    level: 'B1',
-    xp: 1250,
-    streak: 7,
-    totalLessons: 45,
-    completedLessons: 32
-  };
+
+  if (authLoading || profileLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <AuthPage onAuthSuccess={() => window.location.reload()} />;
+  }
 
   const achievements = [
-    { id: 1, name: 'Grammar Guru', icon: '🎯', unlocked: true },
-    { id: 2, name: 'Week Warrior', icon: '🔥', unlocked: true },
+    { id: 1, name: 'Grammar Guru', icon: '🎯', unlocked: (profile?.xp || 0) >= 100 },
+    { id: 2, name: 'Week Warrior', icon: '🔥', unlocked: (profile?.streak || 0) >= 7 },
     { id: 3, name: 'Vocabulary Master', icon: '📚', unlocked: false },
     { id: 4, name: 'Perfect Score', icon: '💯', unlocked: false }
   ];
@@ -45,15 +55,15 @@ const Index = () => {
             </div>
             <div className="flex items-center space-x-4">
               <Badge variant="secondary" className="bg-blue-100 text-blue-700">
-                Level {userData.level}
+                Level {profile?.level || 'A1'}
               </Badge>
               <div className="flex items-center space-x-2 bg-white rounded-full px-4 py-2 shadow-sm">
                 <Zap className="h-4 w-4 text-yellow-500" />
-                <span className="font-semibold">{userData.xp} XP</span>
+                <span className="font-semibold">{profile?.xp || 0} XP</span>
               </div>
               <div className="flex items-center space-x-2 bg-white rounded-full px-4 py-2 shadow-sm">
                 <Target className="h-4 w-4 text-orange-500" />
-                <span className="font-semibold">{userData.streak} day streak</span>
+                <span className="font-semibold">{profile?.streak || 0} day streak</span>
               </div>
             </div>
           </div>
@@ -90,7 +100,7 @@ const Index = () => {
               {/* Welcome Card */}
               <Card className="lg:col-span-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white">
                 <CardHeader>
-                  <CardTitle className="text-2xl">Welcome back, {userData.username}! 🎉</CardTitle>
+                  <CardTitle className="text-2xl">Welcome back, {profile?.username || 'Student'}! 🎉</CardTitle>
                   <CardDescription className="text-blue-100">
                     You're doing great! Keep up the momentum with your daily practice.
                   </CardDescription>
@@ -98,16 +108,21 @@ const Index = () => {
                 <CardContent>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <div className="text-3xl font-bold">{userData.completedLessons}</div>
+                      <div className="text-3xl font-bold">{profile?.completed_lessons || 0}</div>
                       <div className="text-sm text-blue-100">Lessons Completed</div>
                     </div>
                     <div>
-                      <div className="text-3xl font-bold">{Math.round((userData.completedLessons / userData.totalLessons) * 100)}%</div>
+                      <div className="text-3xl font-bold">
+                        {Math.round(((profile?.completed_lessons || 0) / (profile?.total_lessons || 45)) * 100)}%
+                      </div>
                       <div className="text-sm text-blue-100">Overall Progress</div>
                     </div>
                   </div>
                   <div className="mt-4">
-                    <Progress value={(userData.completedLessons / userData.totalLessons) * 100} className="bg-blue-400" />
+                    <Progress 
+                      value={((profile?.completed_lessons || 0) / (profile?.total_lessons || 45)) * 100} 
+                      className="bg-blue-400" 
+                    />
                   </div>
                 </CardContent>
               </Card>
@@ -212,23 +227,28 @@ const Index = () => {
             <ChatInterface />
           </TabsContent>
 
-          {/* Placement Test Tab */}
           <TabsContent value="test">
             <PlacementTest />
           </TabsContent>
 
-          {/* Drills Tab */}
           <TabsContent value="drills">
             <DrillRecommendations />
           </TabsContent>
 
-          {/* Profile Tab */}
           <TabsContent value="profile">
-            <UserProfile userData={userData} achievements={achievements} />
+            <UserProfile userData={profile} achievements={achievements} />
           </TabsContent>
         </Tabs>
       </div>
     </div>
+  );
+};
+
+const Index = () => {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 };
 

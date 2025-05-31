@@ -9,6 +9,141 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      achievements: {
+        Row: {
+          created_at: string | null
+          criteria: Json | null
+          description: string | null
+          icon: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string | null
+          criteria?: Json | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string | null
+          criteria?: Json | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      chat_messages: {
+        Row: {
+          corrections: Json | null
+          created_at: string | null
+          id: string
+          message: string
+          metadata: Json | null
+          sender: string | null
+          session_id: string | null
+        }
+        Insert: {
+          corrections?: Json | null
+          created_at?: string | null
+          id?: string
+          message: string
+          metadata?: Json | null
+          sender?: string | null
+          session_id?: string | null
+        }
+        Update: {
+          corrections?: Json | null
+          created_at?: string | null
+          id?: string
+          message?: string
+          metadata?: Json | null
+          sender?: string | null
+          session_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "chat_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_sessions: {
+        Row: {
+          ended_at: string | null
+          id: string
+          started_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          ended_at?: string | null
+          id?: string
+          started_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          ended_at?: string | null
+          id?: string
+          started_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_sessions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      drill_recommendations: {
+        Row: {
+          drill_data: Json | null
+          id: string
+          level: string
+          reason: string | null
+          recommended_at: string | null
+          resolved: boolean | null
+          topic: string
+          user_id: string | null
+        }
+        Insert: {
+          drill_data?: Json | null
+          id?: string
+          level: string
+          reason?: string | null
+          recommended_at?: string | null
+          resolved?: boolean | null
+          topic: string
+          user_id?: string | null
+        }
+        Update: {
+          drill_data?: Json | null
+          id?: string
+          level?: string
+          reason?: string | null
+          recommended_at?: string | null
+          resolved?: boolean | null
+          topic?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "drill_recommendations_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       employee_hierarchy: {
         Row: {
           department: string
@@ -64,6 +199,236 @@ export type Database = {
           title?: string | null
         }
         Relationships: []
+      }
+      placement_tests: {
+        Row: {
+          completed_at: string | null
+          id: string
+          level: string | null
+          score: number | null
+          started_at: string | null
+          test_type: string | null
+          user_id: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          id?: string
+          level?: string | null
+          score?: number | null
+          started_at?: string | null
+          test_type?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          id?: string
+          level?: string | null
+          score?: number | null
+          started_at?: string | null
+          test_type?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "placement_tests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          completed_lessons: number | null
+          created_at: string | null
+          id: string
+          level: string | null
+          streak: number | null
+          total_lessons: number | null
+          updated_at: string | null
+          username: string | null
+          xp: number | null
+        }
+        Insert: {
+          completed_lessons?: number | null
+          created_at?: string | null
+          id: string
+          level?: string | null
+          streak?: number | null
+          total_lessons?: number | null
+          updated_at?: string | null
+          username?: string | null
+          xp?: number | null
+        }
+        Update: {
+          completed_lessons?: number | null
+          created_at?: string | null
+          id?: string
+          level?: string | null
+          streak?: number | null
+          total_lessons?: number | null
+          updated_at?: string | null
+          username?: string | null
+          xp?: number | null
+        }
+        Relationships: []
+      }
+      test_questions: {
+        Row: {
+          correct_answer: string
+          explanation: string | null
+          id: string
+          is_correct: boolean | null
+          level: string | null
+          options: Json | null
+          question: string
+          test_id: string | null
+          topic: string | null
+          user_answer: string | null
+        }
+        Insert: {
+          correct_answer: string
+          explanation?: string | null
+          id?: string
+          is_correct?: boolean | null
+          level?: string | null
+          options?: Json | null
+          question: string
+          test_id?: string | null
+          topic?: string | null
+          user_answer?: string | null
+        }
+        Update: {
+          correct_answer?: string
+          explanation?: string | null
+          id?: string
+          is_correct?: boolean | null
+          level?: string | null
+          options?: Json | null
+          question?: string
+          test_id?: string | null
+          topic?: string | null
+          user_answer?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "test_questions_test_id_fkey"
+            columns: ["test_id"]
+            isOneToOne: false
+            referencedRelation: "placement_tests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_achievements: {
+        Row: {
+          achievement_id: string | null
+          awarded_at: string | null
+          id: string
+          user_id: string | null
+        }
+        Insert: {
+          achievement_id?: string | null
+          awarded_at?: string | null
+          id?: string
+          user_id?: string | null
+        }
+        Update: {
+          achievement_id?: string | null
+          awarded_at?: string | null
+          id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_achievements_achievement_id_fkey"
+            columns: ["achievement_id"]
+            isOneToOne: false
+            referencedRelation: "achievements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_achievements_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_memory: {
+        Row: {
+          id: string
+          key: string
+          updated_at: string | null
+          user_id: string | null
+          value: Json | null
+        }
+        Insert: {
+          id?: string
+          key: string
+          updated_at?: string | null
+          user_id?: string | null
+          value?: Json | null
+        }
+        Update: {
+          id?: string
+          key?: string
+          updated_at?: string | null
+          user_id?: string | null
+          value?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_memory_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_progress: {
+        Row: {
+          confidence: string | null
+          correct: number | null
+          id: string
+          incorrect: number | null
+          last_attempt: string | null
+          level: string
+          topic: string
+          user_id: string | null
+        }
+        Insert: {
+          confidence?: string | null
+          correct?: number | null
+          id?: string
+          incorrect?: number | null
+          last_attempt?: string | null
+          level: string
+          topic: string
+          user_id?: string | null
+        }
+        Update: {
+          confidence?: string | null
+          correct?: number | null
+          id?: string
+          incorrect?: number | null
+          last_attempt?: string | null
+          level?: string
+          topic?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_progress_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
