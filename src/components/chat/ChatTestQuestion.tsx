@@ -12,8 +12,8 @@ interface ChatTestQuestionProps {
   options?: string[];
   correctAnswer: string;
   explanation: string;
-  onAnswer: (isCorrect: boolean) => void;
-  onComplete: () => void;
+  onAnswer: (answer: string) => void;
+  onComplete?: () => void;
 }
 
 const ChatTestQuestion: React.FC<ChatTestQuestionProps> = ({
@@ -28,20 +28,23 @@ const ChatTestQuestion: React.FC<ChatTestQuestionProps> = ({
   const [answer, setAnswer] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
 
   const handleSubmit = () => {
     if (!answer) return;
 
     const correct = answer.toLowerCase().trim() === correctAnswer.toLowerCase().trim();
     setIsCorrect(correct);
+    setFeedback(explanation);
     setSubmitted(true);
-    onAnswer(correct);
+    onAnswer(answer);
   };
 
   const handleNext = () => {
     setAnswer('');
     setSubmitted(false);
-    onComplete();
+    setFeedback(null);
+    if (onComplete) onComplete();
   };
 
   return (
@@ -101,7 +104,7 @@ const ChatTestQuestion: React.FC<ChatTestQuestionProps> = ({
                   {isCorrect ? 'Correct!' : 'Not quite right'}
                 </span>
               </div>
-              <p className="text-gray-700">{explanation}</p>
+              <p className="text-gray-700">{feedback}</p>
               {!isCorrect && (
                 <p className="mt-2 text-blue-700">
                   Correct answer: {correctAnswer}

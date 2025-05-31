@@ -35,6 +35,7 @@ const ChatInterface = () => {
     currentQuestion,
     isTesting,
     chatDisabled,
+    setAiResponse,
     handleTestAnswer,
     completeTest
   } = useChatContext();
@@ -207,6 +208,10 @@ const ChatInterface = () => {
           context: {
             userLevel: profile?.level || 'A1',
             currentTopic: currentTopic?.name,
+            isTestActive: isTesting,
+            userTestAnswer: isTesting ? userMessage.content : null,
+            currentQuestion: isTesting ? currentQuestion : null,
+            user_id: user?.id,
             chatHistory: messages.slice(-5).map(m => ({
               role: m.sender === 'user' ? 'user' : 'assistant',
               content: m.content
@@ -216,6 +221,9 @@ const ChatInterface = () => {
       });
 
       if (error) throw error;
+
+      // Process AI response
+      setAiResponse(data);
 
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -258,6 +266,12 @@ const ChatInterface = () => {
     }
   };
 
+  const onTestAnswer = (answer: string) => {
+    if (!currentQuestion) return;
+    
+    handleTestAnswer(answer);
+  };
+
   return (
     <div className="max-w-4xl mx-auto h-[600px] flex flex-col">
       {/* Grammar Card Display */}
@@ -280,7 +294,7 @@ const ChatInterface = () => {
           options={currentQuestion.options}
           correctAnswer={currentQuestion.correctAnswer}
           explanation={currentQuestion.explanation}
-          onAnswer={handleTestAnswer}
+          onAnswer={onTestAnswer}
           onComplete={completeTest}
         />
       )}

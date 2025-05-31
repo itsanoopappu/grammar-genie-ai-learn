@@ -24,6 +24,50 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
+    // Handle test answer evaluation
+    if (context?.isTestActive && context?.userTestAnswer && context?.currentQuestion) {
+      const isCorrect = context.userTestAnswer.toLowerCase().trim() === 
+                        context.currentQuestion.correctAnswer.toLowerCase().trim();
+      
+      // Update user skills if we have user_id
+      if (context.user_id) {
+        try {
+          await supabaseClient.functions.invoke('intelligent-tutor', {
+            body: {
+              action: 'update_skill_model',
+              user_id: context.user_id,
+              topic_id: context.currentTopic || 'grammar',
+              performance_data: {
+                isCorrect,
+                difficulty: 5,
+                timeTaken: 30
+              }
+            }
+          });
+        } catch (error) {
+          console.error('Error updating user skills:', error);
+        }
+      }
+
+      // Generate feedback response
+      return new Response(
+        JSON.stringify({
+          response: isCorrect 
+            ? `That's correct! ${context.currentQuestion.explanation}` 
+            : `Not quite. The correct answer is "${context.currentQuestion.correctAnswer}". ${context.currentQuestion.explanation}`,
+          grammarCard: null,
+          testQuestion: null,
+          isTestActive: false,
+          progressUpdate: {
+            topicId: context.currentTopic || 'grammar',
+            isCorrect,
+            xpGain: isCorrect ? 10 : 5
+          }
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const systemPrompt = `You are GrammarAI, an expert English grammar tutor specializing in ${context?.userLevel || 'intermediate'} level instruction. Your role is to:
 
 1. FIRST PRINCIPLES TEACHING:
@@ -54,9 +98,9 @@ serve(async (req) => {
    {
      "response": "Your conversational message",
      "grammarCard": {
-       "topic": "Grammar topic name",
+       "name": "Grammar topic name",
        "level": "CEFR level",
-       "explanation": "Clear explanation focusing on first principles",
+       "description": "Clear explanation focusing on first principles",
        "examples": ["Example 1", "Example 2"],
        "situations": [
          { "context": "Situation description", "usage": "How/why to use it" }
@@ -88,7 +132,9 @@ Remember to:
 - Explain WHY rules work the way they do
 - Show how grammar reflects meaning and intent
 - Make connections between related concepts
-- Use real-world examples that resonate with learners`
+- Use real-world examples that resonate with learners
+
+IMPORTANT: When the user asks to test their skills or knowledge, ALWAYS include a testQuestion in your response with a clear question, options (for multiple-choice), correctAnswer, and explanation. Set isTestActive to true.`
 
     console.log('Making OpenAI API request...')
     

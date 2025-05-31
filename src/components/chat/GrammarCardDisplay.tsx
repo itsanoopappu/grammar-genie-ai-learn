@@ -6,10 +6,10 @@ import { BookOpen, Lightbulb, AlertTriangle, ArrowRight } from 'lucide-react';
 
 interface GrammarCardProps {
   topic: string;
-  level: string;
+  level?: string;
   explanation: string;
-  examples: string[];
-  situations: Array<{
+  examples?: string[];
+  situations?: Array<{
     context: string;
     usage: string;
   }>;
@@ -21,11 +21,11 @@ interface GrammarCardProps {
 
 const GrammarCardDisplay: React.FC<GrammarCardProps> = ({
   topic,
-  level,
+  level = 'A1',
   explanation,
-  examples,
-  situations,
-  rulesChange
+  examples = [],
+  situations = [],
+  rulesChange = []
 }) => {
   return (
     <Card className="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
@@ -51,35 +51,41 @@ const GrammarCardDisplay: React.FC<GrammarCardProps> = ({
         </div>
 
         {/* Examples */}
-        <div className="space-y-2">
-          <h4 className="font-semibold flex items-center text-blue-700">
-            <Lightbulb className="h-4 w-4 mr-2" />
-            Examples
-          </h4>
-          <ul className="space-y-2">
-            {examples.map((example, index) => (
-              <li key={index} className="bg-white/60 rounded p-2 text-gray-700">
-                {example}
-              </li>
-            ))}
-          </ul>
-        </div>
+        {examples.length > 0 && (
+          <div className="space-y-2">
+            <h4 className="font-semibold flex items-center text-blue-700">
+              <Lightbulb className="h-4 w-4 mr-2" />
+              Examples
+            </h4>
+            <ul className="space-y-2">
+              {examples.map((example, index) => (
+                <li key={index} className="bg-white/60 rounded p-2 text-gray-700">
+                  {example}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
-        <Separator className="my-4" />
+        {situations.length > 0 && (
+          <>
+            <Separator className="my-4" />
 
-        {/* Usage Situations */}
-        <div className="space-y-3">
-          <h4 className="font-semibold flex items-center text-blue-700">
-            <BookOpen className="h-4 w-4 mr-2" />
-            When to Use
-          </h4>
-          {situations.map((situation, index) => (
-            <div key={index} className="bg-white/60 rounded-lg p-3">
-              <p className="font-medium text-blue-800 mb-1">{situation.context}</p>
-              <p className="text-gray-600">{situation.usage}</p>
+            {/* Usage Situations */}
+            <div className="space-y-3">
+              <h4 className="font-semibold flex items-center text-blue-700">
+                <BookOpen className="h-4 w-4 mr-2" />
+                When to Use
+              </h4>
+              {situations.map((situation, index) => (
+                <div key={index} className="bg-white/60 rounded-lg p-3">
+                  <p className="font-medium text-blue-800 mb-1">{situation.context}</p>
+                  <p className="text-gray-600">{situation.usage}</p>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </>
+        )}
 
         {/* Rules Changes */}
         {rulesChange && rulesChange.length > 0 && (

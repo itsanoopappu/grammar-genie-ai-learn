@@ -4,7 +4,6 @@ import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
 
 interface GrammarTopic {
-  id: string;
   name: string;
   level: string;
   description: string;
@@ -20,13 +19,11 @@ interface GrammarTopic {
 }
 
 interface TestQuestion {
-  id: string;
   question: string;
   type: 'multiple-choice' | 'text-input';
   options?: string[];
   correctAnswer: string;
   explanation: string;
-  topic: string;
 }
 
 interface ChatContextType {
@@ -39,12 +36,9 @@ interface ChatContextType {
     totalQuestions: number;
     masteredTopics: string[];
   };
-  setCurrentTopic: (topic: GrammarTopic) => void;
-  startTest: () => void;
-  handleTestAnswer: (isCorrect: boolean) => void;
+  setAiResponse: (response: any) => void;
+  handleTestAnswer: (answer: string) => void;
   completeTest: () => void;
-  enableChat: () => void;
-  disableChat: () => void;
 }
 
 const ChatContext = createContext<ChatContextType | null>(null);
@@ -68,36 +62,51 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [userProgress, setUserProgress] = useState({
     correctAnswers: 0,
     totalQuestions: 0,
-    masteredTopics: []
+    masteredTopics: [] as string[]
   });
 
-  const startTest = async () => {
-    if (!currentTopic || !user) return;
+  // Process AI response and update state accordingly
+  const setAiResponse = (response: any) => {
+    if (!response) return;
 
-    try {
-      const { data: questions } = await supabase.functions.invoke('drill-recommendations', {
-        body: {
-          action: 'generate',
-          topic: currentTopic.name,
-          level: profile?.level,
-          count: 3,
-          type: 'test'
-        }
-      });
+    // Update grammar card if provided
+    if (response.grammarCard) {
+      setCurrentTopic(response.grammarCard);
+    }
 
-      if (questions?.[0]) {
-        setCurrentQuestion(questions[0]);
-        setIsTesting(true);
-        setChatDisabled(true);
+    // Update test question if provided
+    if (response.testQuestion) {
+      setCurrentQuestion(response.testQuestion);
+      setIsTesting(true);
+      setChatDisabled(true);
+    } else {
+      setIsTesting(false);
+      setChatDisabled(false);
+    }
+
+    // Update progress if provided
+    if (response.progressUpdate && response.progressUpdate.isCorrect !== null) {
+      setUserProgress(prev => ({
+        ...prev,
+        correctAnswers: prev.correctAnswers + (response.progressUpdate.isCorrect ? 1 : 0),
+        totalQuestions: prev.totalQuestions + 1
+      }));
+
+      // Update user XP if provided
+      if (response.progressUpdate.xpGain && profile) {
+        updateProfile({
+          xp: (profile.xp || 0) + response.progressUpdate.xpGain
+        });
       }
-    } catch (error) {
-      console.error('Error starting test:', error);
     }
   };
 
-  const handleTestAnswer = async (isCorrect: boolean) => {
-    if (!user || !currentTopic) return;
+  // Handle test answer submission
+  const handleTestAnswer = async (answer: string) => {
+    if (!currentQuestion) return;
 
+    const isCorrect = answer.toLowerCase().trim() === currentQuestion.correctAnswer.toLowerCase().trim();
+    
     // Update progress
     setUserProgress(prev => ({
       ...prev,
@@ -105,65 +114,57 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       totalQuestions: prev.totalQuestions + 1
     }));
 
-    // Update user skills
-    try {
-      const { data: existingSkill } = await supabase
-        .from('user_skills')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('topic_id', currentTopic.id)
-        .single();
-
-      const skillUpdate = {
-        user_id: user.id,
-        topic_id: currentTopic.id,
-        skill_level: existingSkill 
-          ? Math.min(1, existingSkill.skill_level + (isCorrect ? 0.1 : -0.05))
-          : isCorrect ? 0.6 : 0.4,
-        attempts_count: (existingSkill?.attempts_count || 0) + 1,
-        last_practiced: new Date().toISOString()
-      };
-
-      if (existingSkill) {
-        await supabase
-          .from('user_skills')
-          .update(skillUpdate)
-          .eq('id', existingSkill.id);
-      } else {
-        await supabase
-          .from('user_skills')
-          .insert(skillUpdate);
-      }
-    } catch (error) {
-      console.error('Error updating user skills:', error);
-    }
-  };
-
-  const completeTest = async () => {
-    setIsTesting(false);
-    setChatDisabled(false);
-    setCurrentQuestion(null);
-
-    // Update user profile
+    // Award XP
     if (profile) {
-      const xpGained = Math.round(
-        (userProgress.correctAnswers / userProgress.totalQuestions) * 50
-      );
+      const xpGain = isCorrect ? 10 : 5;
       await updateProfile({
-        xp: (profile.xp || 0) + xpGained
+        xp: (profile.xp || 0) + xpGain
       });
     }
 
-    // Reset progress
-    setUserProgress({
-      correctAnswers: 0,
-      totalQuestions: 0,
-      masteredTopics: userProgress.masteredTopics
-    });
+    // Update user skills if we have a topic
+    if (currentTopic && user) {
+      try {
+        // Check if skill exists
+        const { data: existingSkill } = await supabase
+          .from('user_skills')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('topic_id', currentTopic.name) // Using name as ID for simplicity
+          .maybeSingle();
+
+        const skillUpdate = {
+          user_id: user.id,
+          topic_id: currentTopic.name,
+          skill_level: existingSkill 
+            ? Math.min(1, existingSkill.skill_level + (isCorrect ? 0.1 : -0.05))
+            : isCorrect ? 0.6 : 0.4,
+          attempts_count: (existingSkill?.attempts_count || 0) + 1,
+          last_practiced: new Date().toISOString()
+        };
+
+        if (existingSkill) {
+          await supabase
+            .from('user_skills')
+            .update(skillUpdate)
+            .eq('id', existingSkill.id);
+        } else {
+          await supabase
+            .from('user_skills')
+            .insert(skillUpdate);
+        }
+      } catch (error) {
+        console.error('Error updating user skills:', error);
+      }
+    }
   };
 
-  const enableChat = () => setChatDisabled(false);
-  const disableChat = () => setChatDisabled(true);
+  // Complete the current test
+  const completeTest = () => {
+    setIsTesting(false);
+    setChatDisabled(false);
+    setCurrentQuestion(null);
+  };
 
   const value = {
     currentTopic,
@@ -171,12 +172,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     isTesting,
     chatDisabled,
     userProgress,
-    setCurrentTopic,
-    startTest,
+    setAiResponse,
     handleTestAnswer,
-    completeTest,
-    enableChat,
-    disableChat
+    completeTest
   };
 
   return (
