@@ -36,6 +36,56 @@ export type Database = {
         }
         Relationships: []
       }
+      assessment_results: {
+        Row: {
+          assessment_type: string
+          created_at: string | null
+          detailed_analysis: Json | null
+          id: string
+          next_steps: Json | null
+          overall_score: number
+          recommended_level: string | null
+          strengths: Json | null
+          topics_assessed: Json
+          user_id: string | null
+          weaknesses: Json | null
+        }
+        Insert: {
+          assessment_type: string
+          created_at?: string | null
+          detailed_analysis?: Json | null
+          id?: string
+          next_steps?: Json | null
+          overall_score: number
+          recommended_level?: string | null
+          strengths?: Json | null
+          topics_assessed: Json
+          user_id?: string | null
+          weaknesses?: Json | null
+        }
+        Update: {
+          assessment_type?: string
+          created_at?: string | null
+          detailed_analysis?: Json | null
+          id?: string
+          next_steps?: Json | null
+          overall_score?: number
+          recommended_level?: string | null
+          strengths?: Json | null
+          topics_assessed?: Json
+          user_id?: string | null
+          weaknesses?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assessment_results_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_messages: {
         Row: {
           corrections: Json | null
@@ -43,7 +93,7 @@ export type Database = {
           id: string
           message: string
           metadata: Json | null
-          sender: string | null
+          sender: Database["public"]["Enums"]["chat_sender_type"]
           session_id: string | null
         }
         Insert: {
@@ -52,7 +102,7 @@ export type Database = {
           id?: string
           message: string
           metadata?: Json | null
-          sender?: string | null
+          sender: Database["public"]["Enums"]["chat_sender_type"]
           session_id?: string | null
         }
         Update: {
@@ -61,7 +111,7 @@ export type Database = {
           id?: string
           message?: string
           metadata?: Json | null
-          sender?: string | null
+          sender?: Database["public"]["Enums"]["chat_sender_type"]
           session_id?: string | null
         }
         Relationships: [
@@ -176,6 +226,219 @@ export type Database = {
           },
         ]
       }
+      exercise_attempts: {
+        Row: {
+          ai_feedback: Json | null
+          attempted_at: string | null
+          difficulty_at_attempt: number | null
+          error_type: string | null
+          exercise_id: string | null
+          hint_used: boolean | null
+          id: string
+          is_correct: boolean
+          session_id: string | null
+          time_taken_seconds: number | null
+          user_answer: Json
+          user_id: string | null
+        }
+        Insert: {
+          ai_feedback?: Json | null
+          attempted_at?: string | null
+          difficulty_at_attempt?: number | null
+          error_type?: string | null
+          exercise_id?: string | null
+          hint_used?: boolean | null
+          id?: string
+          is_correct: boolean
+          session_id?: string | null
+          time_taken_seconds?: number | null
+          user_answer: Json
+          user_id?: string | null
+        }
+        Update: {
+          ai_feedback?: Json | null
+          attempted_at?: string | null
+          difficulty_at_attempt?: number | null
+          error_type?: string | null
+          exercise_id?: string | null
+          hint_used?: boolean | null
+          id?: string
+          is_correct?: boolean
+          session_id?: string | null
+          time_taken_seconds?: number | null
+          user_answer?: Json
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exercise_attempts_exercise_id_fkey"
+            columns: ["exercise_id"]
+            isOneToOne: false
+            referencedRelation: "exercises"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exercise_attempts_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "practice_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exercise_attempts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      exercises: {
+        Row: {
+          content: Json
+          created_at: string | null
+          difficulty_level: number
+          discrimination_index: number | null
+          estimated_time_seconds: number | null
+          id: string
+          success_rate: number | null
+          tags: Json | null
+          topic_id: string | null
+          type: string
+          updated_at: string | null
+        }
+        Insert: {
+          content: Json
+          created_at?: string | null
+          difficulty_level: number
+          discrimination_index?: number | null
+          estimated_time_seconds?: number | null
+          id?: string
+          success_rate?: number | null
+          tags?: Json | null
+          topic_id?: string | null
+          type: string
+          updated_at?: string | null
+        }
+        Update: {
+          content?: Json
+          created_at?: string | null
+          difficulty_level?: number
+          discrimination_index?: number | null
+          estimated_time_seconds?: number | null
+          id?: string
+          success_rate?: number | null
+          tags?: Json | null
+          topic_id?: string | null
+          type?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exercises_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "grammar_topics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      grammar_topics: {
+        Row: {
+          category: string
+          common_errors: Json | null
+          created_at: string | null
+          description: string | null
+          difficulty_score: number
+          id: string
+          learning_objectives: Json | null
+          level: string
+          name: string
+          prerequisites: Json | null
+          updated_at: string | null
+        }
+        Insert: {
+          category: string
+          common_errors?: Json | null
+          created_at?: string | null
+          description?: string | null
+          difficulty_score: number
+          id?: string
+          learning_objectives?: Json | null
+          level: string
+          name: string
+          prerequisites?: Json | null
+          updated_at?: string | null
+        }
+        Update: {
+          category?: string
+          common_errors?: Json | null
+          created_at?: string | null
+          description?: string | null
+          difficulty_score?: number
+          id?: string
+          learning_objectives?: Json | null
+          level?: string
+          name?: string
+          prerequisites?: Json | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      learning_paths: {
+        Row: {
+          completed_topics: Json | null
+          created_at: string | null
+          current_topic_id: string | null
+          estimated_completion_date: string | null
+          id: string
+          path_type: string | null
+          recommended_next_topics: Json | null
+          target_level: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          completed_topics?: Json | null
+          created_at?: string | null
+          current_topic_id?: string | null
+          estimated_completion_date?: string | null
+          id?: string
+          path_type?: string | null
+          recommended_next_topics?: Json | null
+          target_level?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          completed_topics?: Json | null
+          created_at?: string | null
+          current_topic_id?: string | null
+          estimated_completion_date?: string | null
+          id?: string
+          path_type?: string | null
+          recommended_next_topics?: Json | null
+          target_level?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "learning_paths_current_topic_id_fkey"
+            columns: ["current_topic_id"]
+            isOneToOne: false
+            referencedRelation: "grammar_topics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_paths_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       "Org Data": {
         Row: {
           department: string | null
@@ -207,7 +470,7 @@ export type Database = {
           level: string | null
           score: number | null
           started_at: string | null
-          test_type: string | null
+          test_type: Database["public"]["Enums"]["test_type"]
           user_id: string | null
         }
         Insert: {
@@ -216,7 +479,7 @@ export type Database = {
           level?: string | null
           score?: number | null
           started_at?: string | null
-          test_type?: string | null
+          test_type: Database["public"]["Enums"]["test_type"]
           user_id?: string | null
         }
         Update: {
@@ -225,12 +488,75 @@ export type Database = {
           level?: string | null
           score?: number | null
           started_at?: string | null
-          test_type?: string | null
+          test_type?: Database["public"]["Enums"]["test_type"]
           user_id?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "placement_tests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      practice_sessions: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          difficulty_progression: Json | null
+          engagement_score: number | null
+          error_patterns: Json | null
+          exercises_attempted: number | null
+          exercises_correct: number | null
+          id: string
+          session_type: string | null
+          started_at: string | null
+          time_spent_seconds: number | null
+          topic_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string | null
+          difficulty_progression?: Json | null
+          engagement_score?: number | null
+          error_patterns?: Json | null
+          exercises_attempted?: number | null
+          exercises_correct?: number | null
+          id?: string
+          session_type?: string | null
+          started_at?: string | null
+          time_spent_seconds?: number | null
+          topic_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string | null
+          difficulty_progression?: Json | null
+          engagement_score?: number | null
+          error_patterns?: Json | null
+          exercises_attempted?: number | null
+          exercises_correct?: number | null
+          id?: string
+          session_type?: string | null
+          started_at?: string | null
+          time_spent_seconds?: number | null
+          topic_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "practice_sessions_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "grammar_topics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "practice_sessions_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
@@ -430,6 +756,63 @@ export type Database = {
           },
         ]
       }
+      user_skills: {
+        Row: {
+          attempts_count: number | null
+          confidence_interval: number | null
+          created_at: string | null
+          id: string
+          last_practiced: string | null
+          mastery_level: string | null
+          next_review_due: string | null
+          skill_level: number
+          topic_id: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          attempts_count?: number | null
+          confidence_interval?: number | null
+          created_at?: string | null
+          id?: string
+          last_practiced?: string | null
+          mastery_level?: string | null
+          next_review_due?: string | null
+          skill_level?: number
+          topic_id?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          attempts_count?: number | null
+          confidence_interval?: number | null
+          created_at?: string | null
+          id?: string
+          last_practiced?: string | null
+          mastery_level?: string | null
+          next_review_due?: string | null
+          skill_level?: number
+          topic_id?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_skills_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "grammar_topics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_skills_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -438,7 +821,8 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      chat_sender_type: "user" | "ai"
+      test_type: "standard" | "adaptive"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -553,6 +937,9 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      chat_sender_type: ["user", "ai"],
+      test_type: ["standard", "adaptive"],
+    },
   },
 } as const
