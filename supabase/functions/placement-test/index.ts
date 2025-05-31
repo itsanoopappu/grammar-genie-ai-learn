@@ -7,13 +7,26 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Validate required environment variables
+const validateEnv = () => {
+  const required = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'OPENAI_API_KEY'];
+  const missing = required.filter(key => !Deno.env.get(key));
+  
+  if (missing.length > 0) {
+    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    const { action, level, adaptive, user_id, answers, test_id } = await req.json()
+    // Validate environment variables before proceeding
+    validateEnv();
+
+    const { action, questions, answers, test_id } = await req.json()
 
     // Initialize Supabase client
     const supabaseClient = createClient(
@@ -26,15 +39,14 @@ serve(async (req) => {
       const { data: testData, error: testError } = await supabaseClient
         .from('placement_tests')
         .insert({
-          user_id,
-          level,
-          test_type: adaptive ? 'adaptive' : 'standard',
           started_at: new Date().toISOString()
         })
         .select()
         .single()
 
-      if (testError) throw testError
+      if (testError) {
+        throw new Error(`Failed to create test entry: ${testError.message}`);
+      }
 
       const testId = testData.id
 
@@ -50,7 +62,7 @@ serve(async (req) => {
           messages: [
             {
               role: 'system',
-              content: `You are an expert English grammar assessment system. Generate 10 grammar questions suitable for ${level} level students. Each question should test a different grammar concept.`
+              content: 'You are an expert English grammar assessment system. Generate 10 grammar questions suitable for assessing English proficiency.'
             },
             {
               role: 'user',
@@ -70,14 +82,17 @@ serve(async (req) => {
           ],
           temperature: 0.7
         })
-      })
+      }).catch(error => {
+        throw new Error(`OpenAI API request failed: ${error.message}`);
+      });
 
       if (!openAIResponse.ok) {
-        throw new Error(`OpenAI API error: ${openAIResponse.statusText}`)
+        const errorData = await openAIResponse.text();
+        throw new Error(`OpenAI API error (${openAIResponse.status}): ${errorData}`);
       }
 
-      const aiData = await openAIResponse.json()
-      const generatedQuestions = JSON.parse(aiData.choices[0].message.content).questions
+      const aiData = await openAIResponse.json();
+      const generatedQuestions = JSON.parse(aiData.choices[0].message.content).questions;
 
       // Store questions in database
       const { error: questionsError } = await supabaseClient
@@ -89,16 +104,23 @@ serve(async (req) => {
             options: q.options,
             correct_answer: q.correct,
             topic: q.topic,
-            explanation: q.explanation,
-            level
+            explanation: q.explanation
           }))
         )
 
-      if (questionsError) throw questionsError
+      if (questionsError) {
+        throw new Error(`Failed to store questions: ${questionsError.message}`);
+      }
 
       return new Response(
         JSON.stringify({ 
-          questions: generatedQuestions,
+          questions: generatedQuestions.map(q => ({
+            id: q.id,
+            question: q.question,
+            options: q.options,
+            topic: q.topic,
+            level: q.level
+          })),
           testId
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -106,73 +128,61 @@ serve(async (req) => {
     }
 
     if (action === 'evaluate') {
-      // Update test questions with user answers
-      for (const answer of answers) {
-        await supabaseClient
-          .from('test_questions')
-          .update({
-            user_answer: answer.userAnswer,
-            is_correct: answer.userAnswer === answer.correctAnswer
-          })
-          .eq('test_id', test_id)
-          .eq('question', answer.question)
+      if (!questions || !answers) {
+        throw new Error('Missing required parameters: questions and answers are required');
       }
 
       // Calculate results
-      const score = answers.filter(a => a.userAnswer === a.correctAnswer).length
-      const percentage = (score / answers.length) * 100
-      let recommendedLevel = 'A1'
+      const score = Object.values(answers).filter((answer, index) => 
+        answer === questions[index].correct_answer
+      ).length;
       
-      if (percentage >= 90) recommendedLevel = 'C1'
-      else if (percentage >= 80) recommendedLevel = 'B2'
-      else if (percentage >= 70) recommendedLevel = 'B1'
-      else if (percentage >= 60) recommendedLevel = 'A2'
+      const percentage = (score / questions.length) * 100;
+      
+      let recommendedLevel = 'A1';
+      if (percentage >= 90) recommendedLevel = 'C1';
+      else if (percentage >= 80) recommendedLevel = 'B2';
+      else if (percentage >= 70) recommendedLevel = 'B1';
+      else if (percentage >= 60) recommendedLevel = 'A2';
 
-      // Calculate topic performance
-      const topicPerformance = {}
-      const weakTopics = []
-      const strongTopics = []
-
-      answers.forEach(answer => {
-        if (!topicPerformance[answer.topic]) {
-          topicPerformance[answer.topic] = { correct: 0, total: 0 }
+      // Group questions by topic for analysis
+      const topicResults = questions.reduce((acc, q, index) => {
+        const topic = q.topic;
+        if (!acc[topic]) {
+          acc[topic] = { correct: 0, total: 0 };
         }
-        topicPerformance[answer.topic].total++
-        if (answer.userAnswer === answer.correctAnswer) {
-          topicPerformance[answer.topic].correct++
+        acc[topic].total++;
+        if (answers[q.id] === q.correct_answer) {
+          acc[topic].correct++;
         }
-      })
+        return acc;
+      }, {});
 
-      Object.entries(topicPerformance).forEach(([topic, perf]: [string, any]) => {
-        const percentage = (perf.correct / perf.total) * 100
-        if (percentage < 60) weakTopics.push(topic)
-        if (percentage >= 80) strongTopics.push(topic)
-      })
-
-      // Update test completion
-      await supabaseClient
-        .from('placement_tests')
-        .update({
-          score: percentage,
-          level: recommendedLevel,
-          completed_at: new Date().toISOString()
-        })
-        .eq('id', test_id)
+      // Analyze strengths and weaknesses
+      const strengths = [];
+      const weaknesses = [];
+      Object.entries(topicResults).forEach(([topic, result]: [string, any]) => {
+        const topicScore = (result.correct / result.total) * 100;
+        if (topicScore >= 80) {
+          strengths.push(`Strong understanding of ${topic}`);
+        } else if (topicScore <= 60) {
+          weaknesses.push(`Need to improve ${topic}`);
+        }
+      });
 
       return new Response(
         JSON.stringify({
           score,
-          total: answers.length,
-          recommendedLevel,
-          topicPerformance,
-          weakTopics,
-          strongTopics,
-          detailedFeedback: [
-            `You scored ${percentage.toFixed(1)}% overall.`,
-            `Your recommended level is ${recommendedLevel}.`,
-            weakTopics.length > 0 ? `Focus on improving: ${weakTopics.join(', ')}` : 'Great job across all topics!',
-            strongTopics.length > 0 ? `You're particularly strong in: ${strongTopics.join(', ')}` : ''
-          ].filter(Boolean)
+          level: recommendedLevel,
+          strengths,
+          weaknesses,
+          topicsAssessed: Object.keys(topicResults),
+          detailedAnalysis: topicResults,
+          nextSteps: [
+            'Review the topics listed in your weaknesses',
+            'Practice exercises focusing on your weak areas',
+            'Consider taking another test in 2-3 weeks to track progress'
+          ]
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
@@ -184,10 +194,16 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('Error:', error)
+    console.error('Error:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      JSON.stringify({ 
+        error: error.message,
+        details: 'If this error persists, please ensure all required environment variables are set in your Supabase project settings.'
+      }),
+      { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
+        status: 500 
+      }
     )
   }
 })
