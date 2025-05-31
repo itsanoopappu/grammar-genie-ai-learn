@@ -39,7 +39,7 @@ const PlacementTest = () => {
   const [testCompleted, setTestCompleted] = useState(false);
   const [testResults, setTestResults] = useState<TestResults | null>(null);
   const [loading, setLoading] = useState(false);
-  const [testType, setTestType] = useState<'standard' | 'adaptive'>('adaptive');
+  const [testType, setTestType] = useState<'Standard' | 'Adaptive'>('Adaptive');
   const [timeSpent, setTimeSpent] = useState(0);
   const [startTime, setStartTime] = useState<Date | null>(null);
 
@@ -60,7 +60,7 @@ const PlacementTest = () => {
         body: { 
           action: 'generate',
           level: profile?.level || 'A2',
-          adaptive: testType === 'adaptive'
+          adaptive: testType === 'Adaptive'  // Updated to match enum
         }
       });
 
@@ -120,7 +120,7 @@ const PlacementTest = () => {
           user_id: user?.id,
           score: data.score,
           level: data.recommendedLevel,
-          test_type: testType.charAt(0).toUpperCase() + testType.slice(1), // Capitalize first letter
+          test_type: testType,
           completed_at: new Date().toISOString()
         });
 
@@ -182,8 +182,8 @@ const PlacementTest = () => {
             {/* Test Type Selection */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Card 
-                className={`cursor-pointer transition-all ${testType === 'adaptive' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
-                onClick={() => setTestType('adaptive')}
+                className={`cursor-pointer transition-all ${testType === 'Adaptive' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
+                onClick={() => setTestType('Adaptive')}
               >
                 <CardContent className="p-4 text-center">
                   <Brain className="h-8 w-8 text-blue-500 mx-auto mb-2" />
@@ -193,8 +193,8 @@ const PlacementTest = () => {
                 </CardContent>
               </Card>
               <Card 
-                className={`cursor-pointer transition-all ${testType === 'standard' ? 'border-green-500 bg-green-50' : 'border-gray-200'}`}
-                onClick={() => setTestType('standard')}
+                className={`cursor-pointer transition-all ${testType === 'Standard' ? 'border-green-500 bg-green-50' : 'border-gray-200'}`}
+                onClick={() => setTestType('Standard')}
               >
                 <CardContent className="p-4 text-center">
                   <Target className="h-8 w-8 text-green-500 mx-auto mb-2" />
@@ -229,7 +229,7 @@ const PlacementTest = () => {
               <ul className="text-sm text-amber-700 space-y-1">
                 <li>• Choose the best answer for each question</li>
                 <li>• Take your time - accuracy is more important than speed</li>
-                <li>• {testType === 'adaptive' ? 'Questions will adapt to your skill level' : 'Questions cover different difficulty levels'}</li>
+                <li>• {testType === 'Adaptive' ? 'Questions will adapt to your skill level' : 'Questions cover different difficulty levels'}</li>
                 <li>• Results will show your grammar strengths and areas to improve</li>
                 <li>• You can retake the test anytime to track progress</li>
               </ul>
@@ -250,7 +250,7 @@ const PlacementTest = () => {
                 className="px-8"
                 disabled={loading}
               >
-                {loading ? 'Preparing Test...' : `Start ${testType === 'adaptive' ? 'Adaptive' : 'Standard'} Test`}
+                {loading ? 'Preparing Test...' : `Start ${testType} Test`}
               </Button>
             </div>
           </CardContent>
@@ -422,7 +422,7 @@ const PlacementTest = () => {
 
           <div className="flex justify-between">
             <div className="text-sm text-gray-500">
-              {testType === 'adaptive' ? 'Adaptive difficulty' : 'Standard test'}
+              {testType} test
             </div>
             <Button 
               onClick={handleNextQuestion} 

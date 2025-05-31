@@ -12,7 +12,7 @@ import { useProfile } from '@/hooks/useProfile';
 interface Message {
   id: string;
   content: string;
-  sender: 'User' | 'AI';
+  sender: 'User' | 'AI';  // Updated to match database enum
   timestamp: Date;
   corrections?: Array<{
     original: string;
