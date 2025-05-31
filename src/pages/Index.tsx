@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { AuthProvider, useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/hooks/useAuth';
 import AuthPage from '@/components/AuthPage';
 import { Header } from '@/components/Header';
 import MainLayout from '@/components/MainLayout';
 
-const AppContent = () => {
+const Index = () => {
   const { user, loading: authLoading } = useAuth();
-  const [activeFeature, setActiveFeature] = useState('smart-practice');
+  const [activeFeature] = useState('smart-practice');
 
   if (authLoading) {
     return (
@@ -28,14 +28,6 @@ const AppContent = () => {
       <Header />
       <MainLayout defaultFeature={activeFeature} />
     </div>
-  );
-};
-
-const Index = () => {
-  return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
   );
 };
 
