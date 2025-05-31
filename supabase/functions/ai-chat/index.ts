@@ -13,9 +13,13 @@ serve(async (req) => {
   }
 
   try {
-    const { message, sessionId, userLevel } = await req.json()
+    const { message, context } = await req.json()
 
-    const systemPrompt = `You are GrammarAI, an expert English grammar tutor specializing in ${userLevel || 'intermediate'} level instruction. Your role is to:
+    if (!message) {
+      throw new Error('Message is required')
+    }
+
+    const systemPrompt = `You are GrammarAI, an expert English grammar tutor specializing in ${context?.userLevel || 'intermediate'} level instruction. Your role is to:
 
 1. GRAMMAR ANALYSIS: Carefully analyze user messages for grammar errors, including:
    - Subject-verb agreement
@@ -31,15 +35,16 @@ serve(async (req) => {
    - Gives additional examples
    - Adapts complexity to user's level
 
-3. STRUCTURED OUTPUT: Format your response as JSON with:
-   - "content": Your main educational response
-   - "corrections": Array of specific grammar corrections
-   - "tips": Array of helpful grammar tips
-   - "difficulty": Rate the concepts discussed (1-5)
-   - "encouragement": Positive reinforcement message
+3. STRUCTURED OUTPUT: Always respond with a JSON object containing:
+   - "response": Your main educational response
+   - "corrections": Array of specific grammar corrections (if any)
+   - "suggestions": Array of helpful grammar tips
+   - "grammarScore": Rate the grammar quality (1-100)
 
 Be patient, encouraging, and focus on one or two key grammar points per response to avoid overwhelming the user.`
 
+    console.log('Making OpenAI API request...')
+    
     const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -63,22 +68,56 @@ Be patient, encouraging, and focus on one or two key grammar points per response
       })
     })
 
+    if (!openAIResponse.ok) {
+      const errorText = await openAIResponse.text()
+      console.error('OpenAI API error:', openAIResponse.status, errorText)
+      throw new Error(`OpenAI API error: ${openAIResponse.status} ${errorText}`)
+    }
+
     const aiResponse = await openAIResponse.json()
-    let responseContent = aiResponse.choices[0].message.content
+    console.log('OpenAI response:', JSON.stringify(aiResponse, null, 2))
+
+    if (!aiResponse.choices || aiResponse.choices.length === 0) {
+      console.error('No choices in OpenAI response:', aiResponse)
+      throw new Error('No response generated from OpenAI')
+    }
+
+    let responseContent = aiResponse.choices[0].message?.content
+
+    if (!responseContent) {
+      console.error('No content in OpenAI response choice:', aiResponse.choices[0])
+      throw new Error('No content in OpenAI response')
+    }
 
     // Try to parse as JSON, fallback to structured format
     let parsedResponse
     try {
       parsedResponse = JSON.parse(responseContent)
-    } catch {
+    } catch (parseError) {
+      console.log('Failed to parse as JSON, creating structured response:', parseError)
       parsedResponse = {
-        content: responseContent,
+        response: responseContent,
         corrections: [],
-        tips: [],
-        difficulty: 2,
-        encouragement: "Keep practicing! Every mistake is a learning opportunity."
+        suggestions: [],
+        grammarScore: 85
       }
     }
+
+    // Ensure required fields exist
+    if (!parsedResponse.response) {
+      parsedResponse.response = responseContent
+    }
+    if (!parsedResponse.corrections) {
+      parsedResponse.corrections = []
+    }
+    if (!parsedResponse.suggestions) {
+      parsedResponse.suggestions = []
+    }
+    if (!parsedResponse.grammarScore) {
+      parsedResponse.grammarScore = 85
+    }
+
+    console.log('Returning parsed response:', parsedResponse)
 
     return new Response(
       JSON.stringify(parsedResponse),
@@ -86,15 +125,14 @@ Be patient, encouraging, and focus on one or two key grammar points per response
     )
 
   } catch (error) {
-    console.error('Error:', error)
+    console.error('Error in ai-chat function:', error)
     return new Response(
       JSON.stringify({ 
         error: error.message,
-        content: "I'm having trouble right now. Please try again later.",
+        response: "I'm having trouble right now. Please try again later.",
         corrections: [],
-        tips: [],
-        difficulty: 1,
-        encouragement: "Don't worry, we'll get through this together!"
+        suggestions: [],
+        grammarScore: null
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     )
