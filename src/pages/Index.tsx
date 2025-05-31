@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MessageCircle, CheckCircle, Target, BookOpen, TrendingUp } from 'lucide-react';
@@ -10,6 +9,7 @@ import { Header } from '@/components/Header';
 import SmartPractice from '@/components/SmartPractice';
 import MyProgress from '@/components/MyProgress';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
+import { ChatProvider } from '@/contexts/ChatContext';
 
 const AppContent = () => {
   const { user, loading: authLoading } = useAuth();
@@ -71,7 +71,9 @@ const AppContent = () => {
           </TabsContent>
 
           <TabsContent value="chat" className="mt-0">
-            <ChatInterface />
+            <ChatProvider>
+              <ChatInterface />
+            </ChatProvider>
           </TabsContent>
 
           <TabsContent value="progress" className="mt-0">
