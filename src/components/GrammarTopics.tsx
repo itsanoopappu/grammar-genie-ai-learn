@@ -325,3 +325,5 @@ const GrammarTopics = () => {
 };
 
 export default GrammarTopics;
+
+export { GrammarTopics }
