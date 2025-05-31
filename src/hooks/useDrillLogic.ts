@@ -95,9 +95,9 @@ export const useDrillLogic = () => {
         .single();
 
       if (existingDrill?.drill_data) {
-        // Properly type the drill_data as Exercise[]
+        // Properly type the drill_data as Exercise[] with safe conversion
         const exercises = Array.isArray(existingDrill.drill_data) 
-          ? existingDrill.drill_data as Exercise[]
+          ? (existingDrill.drill_data as unknown as Exercise[])
           : [];
           
         setState(produce(state => {

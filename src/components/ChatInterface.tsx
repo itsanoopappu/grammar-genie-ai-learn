@@ -119,7 +119,7 @@ const ChatInterface = () => {
         const formattedMessages: Message[] = chatMessages.map((msg: any) => ({
           id: msg.id,
           content: msg.message,
-          sender: msg.sender as 'User' | 'AI',
+          sender: msg.sender as 'user' | 'ai', // Fixed: using lowercase types
           timestamp: new Date(msg.created_at),
           corrections: msg.corrections || [],
           suggestions: msg.metadata?.suggestions || [],
@@ -279,15 +279,15 @@ const ChatInterface = () => {
                 <div
                   key={message.id}
                   className={`flex items-start space-x-3 ${
-                    message.sender === 'User' ? 'flex-row-reverse space-x-reverse' : ''
+                    message.sender === 'user' ? 'flex-row-reverse space-x-reverse' : ''
                   }`}
                 >
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                    message.sender === 'User' 
+                    message.sender === 'user' 
                       ? 'bg-blue-500 text-white' 
                       : 'bg-green-500 text-white'
                   }`}>
-                    {message.sender === 'User' ? (
+                    {message.sender === 'user' ? (
                       <User className="h-4 w-4" />
                     ) : (
                       <Bot className="h-4 w-4" />
@@ -295,15 +295,15 @@ const ChatInterface = () => {
                   </div>
 
                   <div className={`flex-1 max-w-[80%] ${
-                    message.sender === 'User' ? 'text-right' : 'text-left'
+                    message.sender === 'user' ? 'text-right' : 'text-left'
                   }`}>
                     <div className={`inline-block p-3 rounded-lg ${
-                      message.sender === 'User'
+                      message.sender === 'user'
                         ? 'bg-blue-500 text-white'
                         : 'bg-gray-100 text-gray-900'
                     }`}>
                       <p className="whitespace-pre-wrap">{message.content}</p>
-                      {message.sender === 'AI' && (
+                      {message.sender === 'ai' && (
                         <Button
                           variant="ghost"
                           size="sm"

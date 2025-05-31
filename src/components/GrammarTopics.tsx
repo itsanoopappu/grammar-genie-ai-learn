@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -258,7 +259,8 @@ export function GrammarTopics() {
                                       variant="ghost"
                                       className="h-7 w-7 p-0"
                                       onClick={() => {
-                                        document.querySelector('[data-state="inactive"][value="drills"]')?.click();
+                                        const drillsTab = document.querySelector('[data-state="inactive"][value="drills"]') as HTMLElement;
+                                        drillsTab?.click();
                                       }}
                                     >
                                       <Target className="h-4 w-4" />
@@ -269,7 +271,8 @@ export function GrammarTopics() {
                                       variant="ghost"
                                       className="h-7 w-7 p-0"
                                       onClick={() => {
-                                        document.querySelector('[data-state="inactive"][value="chat"]')?.click();
+                                        const chatTab = document.querySelector('[data-state="inactive"][value="chat"]') as HTMLElement;
+                                        chatTab?.click();
                                       }}
                                     >
                                       <MessageCircle className="h-4 w-4" />
