@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,7 +13,7 @@ import { useProfile } from '@/hooks/useProfile';
 interface Message {
   id: string;
   content: string;
-  sender: 'User' | 'AI';  // Updated to match database enum
+  sender: 'user' | 'ai';  // Updated to match database enum
   timestamp: Date;
   corrections?: Array<{
     original: string;
@@ -138,7 +139,7 @@ const ChatInterface = () => {
       await supabase.from('chat_messages').insert({
         session_id: currentSessionId,
         message: message.content,
-        sender: message.sender,
+        sender: message.sender, // Now correctly typed as 'user' | 'ai'
         corrections: message.corrections || null,
         metadata: {
           suggestions: message.suggestions || [],
@@ -179,7 +180,7 @@ const ChatInterface = () => {
     const userMessage: Message = {
       id: Date.now().toString(),
       content: inputMessage.trim(),
-      sender: 'User',
+      sender: 'user', // Updated to lowercase
       timestamp: new Date()
     };
 
@@ -198,7 +199,7 @@ const ChatInterface = () => {
           context: {
             userLevel: profile?.level || 'A1',
             chatHistory: messages.slice(-5).map(m => ({
-              role: m.sender === 'User' ? 'user' : 'assistant',
+              role: m.sender === 'user' ? 'user' : 'assistant',
               content: m.content
             }))
           }
@@ -210,7 +211,7 @@ const ChatInterface = () => {
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
         content: data.response,
-        sender: 'AI',
+        sender: 'ai', // Updated to lowercase
         timestamp: new Date(),
         corrections: data.corrections,
         suggestions: data.suggestions,
@@ -234,7 +235,7 @@ const ChatInterface = () => {
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         content: 'Sorry, I encountered an error. Please try again.',
-        sender: 'AI',
+        sender: 'ai', // Updated to lowercase
         timestamp: new Date()
       };
       setMessages([...updatedMessages, errorMessage]);

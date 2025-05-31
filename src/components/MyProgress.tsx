@@ -1,13 +1,14 @@
-
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { useState, useEffect } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Calendar } from '@/components/ui/calendar';
+import { TrendingUp, Target, Trophy, Clock, Brain, Star } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
-import { TrendingUp, Clock, Target, BookOpen, Award, Calendar } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 
 interface SkillData {
   topic_name: string;
@@ -15,35 +16,33 @@ interface SkillData {
   mastery_level: string;
   attempts_count: number;
   last_practiced: string;
-  category: string;
-}
-
-interface SessionData {
-  topic_name: string;
-  session_type: string;
-  exercises_attempted: number;
-  exercises_correct: number;
-  time_spent_seconds: number;
-  started_at: string;
-  accuracy: number;
 }
 
 interface AssessmentData {
+  id: string;
   assessment_type: string;
   overall_score: number;
+  strengths: string[]; // Updated to match expected type
+  weaknesses: string[]; // Updated to match expected type
   recommended_level: string;
-  strengths: string[];
-  weaknesses: string[];
   created_at: string;
 }
 
-const MyProgress: React.FC = () => {
+interface SessionData {
+  date: string;
+  exercises_correct: number;
+  exercises_attempted: number;
+  time_spent: number;
+}
+
+const MyProgress = () => {
   const { user } = useAuth();
   const { profile } = useProfile();
-  const [skills, setSkills] = useState<SkillData[]>([]);
-  const [sessions, setSessions] = useState<SessionData[]>([]);
-  const [assessments, setAssessments] = useState<AssessmentData[]>([]);
+  const [skillsData, setSkillsData] = useState<SkillData[]>([]);
+  const [assessmentData, setAssessmentData] = useState<AssessmentData[]>([]);
+  const [sessionData, setSessionData] = useState<SessionData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
 
   useEffect(() => {
     if (user) {
@@ -54,73 +53,72 @@ const MyProgress: React.FC = () => {
   const fetchProgressData = async () => {
     if (!user) return;
 
+    setLoading(true);
     try {
-      // Fetch user skills with topic information
-      const { data: skillsData } = await supabase
+      // Fetch user skills with topic names
+      const { data: skills, error: skillsError } = await supabase
         .from('user_skills')
         .select(`
           skill_level,
           mastery_level,
           attempts_count,
           last_practiced,
-          grammar_topics (
-            name,
-            category
-          )
+          grammar_topics!inner(name)
         `)
         .eq('user_id', user.id);
 
-      // Fetch practice sessions with topic information
-      const { data: sessionsData } = await supabase
-        .from('practice_sessions')
-        .select(`
-          session_type,
-          exercises_attempted,
-          exercises_correct,
-          time_spent_seconds,
-          started_at,
-          grammar_topics (
-            name
-          )
-        `)
-        .eq('user_id', user.id)
-        .order('started_at', { ascending: false })
-        .limit(20);
+      if (skillsError) throw skillsError;
 
-      // Fetch assessment results
-      const { data: assessmentsData } = await supabase
-        .from('assessment_results')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(10);
-
-      // Transform skills data
-      const transformedSkills = skillsData?.map(skill => ({
-        topic_name: skill.grammar_topics?.name || 'Unknown Topic',
+      const formattedSkills = skills?.map((skill: any) => ({
+        topic_name: skill.grammar_topics.name,
         skill_level: skill.skill_level,
         mastery_level: skill.mastery_level,
         attempts_count: skill.attempts_count,
-        last_practiced: skill.last_practiced,
-        category: skill.grammar_topics?.category || 'General'
+        last_practiced: skill.last_practiced
       })) || [];
 
-      // Transform sessions data
-      const transformedSessions = sessionsData?.map(session => ({
-        topic_name: session.grammar_topics?.name || 'Unknown Topic',
-        session_type: session.session_type,
-        exercises_attempted: session.exercises_attempted,
-        exercises_correct: session.exercises_correct,
-        time_spent_seconds: session.time_spent_seconds,
-        started_at: session.started_at,
-        accuracy: session.exercises_attempted > 0 
-          ? (session.exercises_correct / session.exercises_attempted) * 100 
-          : 0
+      setSkillsData(formattedSkills);
+
+      // Fetch assessment results with proper type conversion
+      const { data: assessments, error: assessmentError } = await supabase
+        .from('assessment_results')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (assessmentError) throw assessmentError;
+
+      const formattedAssessments = assessments?.map((assessment: any) => ({
+        id: assessment.id,
+        assessment_type: assessment.assessment_type,
+        overall_score: assessment.overall_score,
+        strengths: Array.isArray(assessment.strengths) ? assessment.strengths : [],
+        weaknesses: Array.isArray(assessment.weaknesses) ? assessment.weaknesses : [],
+        recommended_level: assessment.recommended_level,
+        created_at: assessment.created_at
       })) || [];
 
-      setSkills(transformedSkills);
-      setSessions(transformedSessions);
-      setAssessments(assessmentsData || []);
+      setAssessmentData(formattedAssessments);
+
+      // Fetch practice session data for charts
+      const { data: sessions, error: sessionError } = await supabase
+        .from('practice_sessions')
+        .select('exercises_correct, exercises_attempted, time_spent_seconds, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true })
+        .limit(30);
+
+      if (sessionError) throw sessionError;
+
+      const formattedSessions = sessions?.map((session: any) => ({
+        date: new Date(session.created_at).toLocaleDateString(),
+        exercises_correct: session.exercises_correct || 0,
+        exercises_attempted: session.exercises_attempted || 0,
+        time_spent: Math.round((session.time_spent_seconds || 0) / 60) // Convert to minutes
+      })) || [];
+
+      setSessionData(formattedSessions);
+
     } catch (error) {
       console.error('Error fetching progress data:', error);
     } finally {
@@ -128,267 +126,174 @@ const MyProgress: React.FC = () => {
     }
   };
 
-  const getMasteryColor = (mastery: string) => {
-    switch (mastery) {
-      case 'expert': return 'bg-purple-100 text-purple-800';
-      case 'advanced': return 'bg-green-100 text-green-800';
-      case 'proficient': return 'bg-blue-100 text-blue-800';
-      case 'developing': return 'bg-yellow-100 text-yellow-800';
-      case 'novice': return 'bg-gray-100 text-gray-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
+  const formatDate = (date: Date | undefined): string => {
+    if (!date) return 'No date selected';
+    return date.toLocaleDateString();
   };
 
-  const formatTime = (seconds: number) => {
-    const minutes = Math.floor(seconds / 60);
-    return minutes > 0 ? `${minutes}m` : `${seconds}s`;
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString();
-  };
-
-  if (loading) {
-    return (
-      <Card>
-        <CardContent className="p-6">
-          <div className="flex items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            <span className="ml-2">Loading your progress...</span>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  const filteredSessions = sessionData.filter(session => session.date === formatDate(selectedDate));
 
   return (
-    <div className="space-y-6">
-      {/* Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <Award className="h-5 w-5 text-yellow-500" />
-              <div>
-                <p className="text-sm text-gray-600">Current Level</p>
-                <p className="text-xl font-bold">{profile?.level || 'A1'}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <TrendingUp className="h-5 w-5 text-blue-500" />
-              <div>
-                <p className="text-sm text-gray-600">XP Points</p>
-                <p className="text-xl font-bold">{profile?.xp || 0}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <Target className="h-5 w-5 text-green-500" />
-              <div>
-                <p className="text-sm text-gray-600">Topics Practiced</p>
-                <p className="text-xl font-bold">{skills.length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <Clock className="h-5 w-5 text-purple-500" />
-              <div>
-                <p className="text-sm text-gray-600">Total Sessions</p>
-                <p className="text-xl font-bold">{sessions.length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+    <div className="container mx-auto p-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <TrendingUp className="h-5 w-5 text-blue-500" />
+            <span>My Progress</span>
+          </CardTitle>
+          <CardDescription>Track your learning journey and see your improvements over time.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="text-center">Loading...</div>
+          ) : (
+            <Tabs defaultValue="skills" className="space-y-4">
+              <TabsList>
+                <TabsTrigger value="skills" className="flex items-center space-x-2">
+                  <Target className="h-4 w-4" />
+                  <span>Skills</span>
+                </TabsTrigger>
+                <TabsTrigger value="assessments" className="flex items-center space-x-2">
+                  <Trophy className="h-4 w-4" />
+                  <span>Assessments</span>
+                </TabsTrigger>
+                <TabsTrigger value="sessions" className="flex items-center space-x-2">
+                  <Clock className="h-4 w-4" />
+                  <span>Practice Sessions</span>
+                </TabsTrigger>
+              </TabsList>
 
-      {/* Detailed Progress Tabs */}
-      <Tabs defaultValue="skills" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="skills">Skills & Mastery</TabsTrigger>
-          <TabsTrigger value="sessions">Practice History</TabsTrigger>
-          <TabsTrigger value="assessments">Assessment Results</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="skills" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <BookOpen className="h-5 w-5" />
-                <span>Topic Mastery Overview</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4">
-                {skills.map((skill, index) => (
-                  <Card key={index} className="p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center space-x-3">
-                        <h3 className="font-semibold">{skill.topic_name}</h3>
-                        <Badge variant="outline">{skill.category}</Badge>
-                        <Badge className={getMasteryColor(skill.mastery_level)}>
-                          {skill.mastery_level}
-                        </Badge>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm text-gray-500">{skill.attempts_count} attempts</p>
-                        <p className="text-xs text-gray-400">
-                          Last: {skill.last_practiced ? formatDate(skill.last_practiced) : 'Never'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span>Skill Level</span>
-                        <span>{Math.round(skill.skill_level * 100)}%</span>
-                      </div>
-                      <Progress value={skill.skill_level * 100} className="h-2" />
-                    </div>
-                  </Card>
-                ))}
-                {skills.length === 0 && (
-                  <div className="text-center py-8 text-gray-500">
-                    <BookOpen className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No skills data yet. Start practicing to see your progress!</p>
+              <TabsContent value="skills" className="space-y-4">
+                <h3 className="text-lg font-semibold">Current Skill Levels</h3>
+                {skillsData.length === 0 ? (
+                  <div className="text-gray-500">No skill data available yet. Start practicing to see your skills progress!</div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {skillsData.map((skill, index) => (
+                      <Card key={index} className="bg-gray-50 border border-gray-200">
+                        <CardHeader>
+                          <CardTitle>{skill.topic_name}</CardTitle>
+                          <CardDescription>Mastery Level: {skill.mastery_level}</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-2">
+                            <div className="flex items-center space-x-2">
+                              <Brain className="h-4 w-4 text-blue-500" />
+                              <span>Skill Level: {skill.skill_level}</span>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <Star className="h-4 w-4 text-yellow-500" />
+                              <span>Attempts: {skill.attempts_count}</span>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <Clock className="h-4 w-4 text-gray-500" />
+                              <span>Last Practiced: {skill.last_practiced ? new Date(skill.last_practiced).toLocaleDateString() : 'Never'}</span>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
                   </div>
                 )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+              </TabsContent>
 
-        <TabsContent value="sessions" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Calendar className="h-5 w-5" />
-                <span>Recent Practice Sessions</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {sessions.map((session, index) => (
-                  <Card key={index} className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
-                        <div>
-                          <h3 className="font-semibold">{session.topic_name}</h3>
-                          <p className="text-sm text-gray-600 capitalize">
-                            {session.session_type} session
-                          </p>
-                        </div>
-                        <Badge variant="outline">
-                          {session.exercises_correct}/{session.exercises_attempted} correct
-                        </Badge>
-                        <Badge 
-                          className={
-                            session.accuracy >= 80 ? 'bg-green-100 text-green-800' :
-                            session.accuracy >= 60 ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-red-100 text-red-800'
-                          }
-                        >
-                          {Math.round(session.accuracy)}% accuracy
-                        </Badge>
-                      </div>
-                      <div className="text-right text-sm text-gray-500">
-                        <p>{formatTime(session.time_spent_seconds)}</p>
-                        <p>{formatDate(session.started_at)}</p>
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-                {sessions.length === 0 && (
-                  <div className="text-center py-8 text-gray-500">
-                    <Clock className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No practice sessions yet. Start your learning journey!</p>
+              <TabsContent value="assessments" className="space-y-4">
+                <h3 className="text-lg font-semibold">Assessment History</h3>
+                {assessmentData.length === 0 ? (
+                  <div className="text-gray-500">No assessments taken yet. Take a placement test to evaluate your current level!</div>
+                ) : (
+                  <div className="space-y-4">
+                    {assessmentData.map((assessment) => (
+                      <Card key={assessment.id} className="bg-gray-50 border border-gray-200">
+                        <CardHeader>
+                          <CardTitle>Assessment: {assessment.assessment_type}</CardTitle>
+                          <CardDescription>Taken on: {new Date(assessment.created_at).toLocaleDateString()}</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-2">
+                            <div className="flex items-center space-x-2">
+                              <Progress value={assessment.overall_score} className="w-32" />
+                              <span>Overall Score: {assessment.overall_score}%</span>
+                            </div>
+                            <div>
+                              <span className="font-medium">Recommended Level:</span> {assessment.recommended_level}
+                            </div>
+                            <div>
+                              <span className="font-medium">Strengths:</span> {assessment.strengths.join(', ') || 'N/A'}
+                            </div>
+                            <div>
+                              <span className="font-medium">Weaknesses:</span> {assessment.weaknesses.join(', ') || 'N/A'}
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
                   </div>
                 )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+              </TabsContent>
 
-        <TabsContent value="assessments" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Target className="h-5 w-5" />
-                <span>Assessment History</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {assessments.map((assessment, index) => (
-                  <Card key={index} className="p-4">
-                    <div className="flex items-start justify-between mb-4">
-                      <div>
-                        <h3 className="font-semibold capitalize">
-                          {assessment.assessment_type} Assessment
-                        </h3>
-                        <p className="text-sm text-gray-600">
-                          {formatDate(assessment.created_at)}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <Badge variant="outline" className="mb-2">
-                          Score: {Math.round(assessment.overall_score)}%
-                        </Badge>
-                        {assessment.recommended_level && (
-                          <Badge>{assessment.recommended_level}</Badge>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {assessment.strengths && assessment.strengths.length > 0 && (
-                      <div className="mb-3">
-                        <p className="text-sm font-medium text-green-700 mb-1">Strengths:</p>
-                        <div className="flex flex-wrap gap-1">
-                          {assessment.strengths.map((strength, i) => (
-                            <Badge key={i} className="bg-green-100 text-green-800 text-xs">
-                              {strength}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {assessment.weaknesses && assessment.weaknesses.length > 0 && (
-                      <div>
-                        <p className="text-sm font-medium text-red-700 mb-1">Areas for improvement:</p>
-                        <div className="flex flex-wrap gap-1">
-                          {assessment.weaknesses.map((weakness, i) => (
-                            <Badge key={i} className="bg-red-100 text-red-800 text-xs">
-                              {weakness}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </Card>
-                ))}
-                {assessments.length === 0 && (
-                  <div className="text-center py-8 text-gray-500">
-                    <Target className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No assessments completed yet. Take a placement test to get started!</p>
+              <TabsContent value="sessions" className="space-y-4">
+                <h3 className="text-lg font-semibold">Practice Session Data</h3>
+                <div className="flex items-center space-x-4">
+                  <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={setSelectedDate}
+                    className="rounded-md border"
+                  />
+                  <div>
+                    <h4 className="text-sm font-medium">Selected Date:</h4>
+                    <p className="text-gray-600">{formatDate(selectedDate)}</p>
+                  </div>
+                </div>
+
+                {filteredSessions.length === 0 ? (
+                  <div className="text-gray-500">No practice sessions recorded for the selected date.</div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Card className="bg-gray-50 border border-gray-200">
+                      <CardHeader>
+                        <CardTitle>Exercises Completed</CardTitle>
+                        <CardDescription>Number of exercises correct vs. attempted</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={250}>
+                          <BarChart data={filteredSessions}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="date" />
+                            <YAxis />
+                            <Tooltip />
+                            <Bar dataKey="exercises_correct" fill="#82ca9d" />
+                            <Bar dataKey="exercises_attempted" fill="#8884d8" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="bg-gray-50 border border-gray-200">
+                      <CardHeader>
+                        <CardTitle>Time Spent Practicing</CardTitle>
+                        <CardDescription>Minutes spent practicing on the selected date</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={250}>
+                          <LineChart data={filteredSessions}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="date" />
+                            <YAxis />
+                            <Tooltip />
+                            <Line type="monotone" dataKey="time_spent" stroke="#8884d8" activeDot={{ r: 8 }} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
                   </div>
                 )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+              </TabsContent>
+            </Tabs>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 };

@@ -1,3 +1,4 @@
+
 import { atom, useAtom } from 'jotai';
 import { produce } from 'immer';
 import { supabase } from '@/integrations/supabase/client';
@@ -94,8 +95,13 @@ export const useDrillLogic = () => {
         .single();
 
       if (existingDrill?.drill_data) {
+        // Properly type the drill_data as Exercise[]
+        const exercises = Array.isArray(existingDrill.drill_data) 
+          ? existingDrill.drill_data as Exercise[]
+          : [];
+          
         setState(produce(state => {
-          state.exercises = existingDrill.drill_data;
+          state.exercises = exercises;
           state.selectedDrill = drill;
           state.drillInProgress = true;
           state.currentExercise = 0;
@@ -118,7 +124,7 @@ export const useDrillLogic = () => {
       if (error) throw error;
       
       setState(produce(state => {
-        state.exercises = data.exercises;
+        state.exercises = data.exercises || [];
         state.selectedDrill = drill;
         state.drillInProgress = true;
         state.currentExercise = 0;
