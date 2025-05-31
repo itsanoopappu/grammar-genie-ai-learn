@@ -17,7 +17,8 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { action, level, category } = await req.json()
+    // Read request body once and destructure all possible parameters
+    const { action, level, category, topic_id } = await req.json()
 
     if (action === 'get_topics') {
       // Get topics from database
@@ -54,8 +55,6 @@ serve(async (req) => {
     }
 
     if (action === 'get_exercises') {
-      const { topic_id } = await req.json()
-      
       // Get exercises for topic
       const { data: exercises, error } = await supabaseClient
         .from('exercises')
