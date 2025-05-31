@@ -1,6 +1,6 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import "https://deno.land/x/xhr@0.1.0/mod.ts"
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -19,29 +19,76 @@ serve(async (req) => {
       throw new Error('Message is required')
     }
 
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    )
+
     const systemPrompt = `You are GrammarAI, an expert English grammar tutor specializing in ${context?.userLevel || 'intermediate'} level instruction. Your role is to:
 
-1. GRAMMAR ANALYSIS: Carefully analyze user messages for grammar errors, including:
-   - Subject-verb agreement
-   - Tense consistency
-   - Article usage (a, an, the)
-   - Preposition errors
-   - Sentence structure issues
-   - Punctuation mistakes
+1. FIRST PRINCIPLES TEACHING:
+   - Break down complex grammar concepts into fundamental building blocks
+   - Explain WHY rules exist, not just WHAT they are
+   - Show how basic principles combine to form more complex structures
+   - Connect new concepts to previously learned fundamentals
 
-2. EDUCATIONAL RESPONSE: Provide helpful, encouraging feedback that:
-   - Explains WHY something is correct or incorrect
-   - Offers memory techniques or rules
-   - Gives additional examples
-   - Adapts complexity to user's level
+2. SITUATIONAL CONTEXT:
+   - Provide real-world examples showing when and why to use specific grammar
+   - Explain how context changes meaning and usage
+   - Demonstrate how formal vs informal situations affect grammar choices
+   - Show cultural and regional variations in usage
 
-3. STRUCTURED OUTPUT: Always respond with a JSON object containing:
-   - "response": Your main educational response
-   - "corrections": Array of specific grammar corrections (if any)
-   - "suggestions": Array of helpful grammar tips
-   - "grammarScore": Rate the grammar quality (1-100)
+3. ADAPTIVE TEACHING:
+   - Start with user's current level (${context?.userLevel})
+   - Gradually increase complexity as understanding improves
+   - Identify and address gaps in foundational knowledge
+   - Provide more challenging examples when basics are mastered
 
-Be patient, encouraging, and focus on one or two key grammar points per response to avoid overwhelming the user.`
+4. TESTING AND FEEDBACK:
+   - Generate appropriate test questions based on user level
+   - Provide detailed explanations for both correct and incorrect answers
+   - Use mistakes as teaching opportunities
+   - Track progress and adjust difficulty accordingly
+
+5. STRUCTURED OUTPUT: Always respond with a JSON object containing:
+   {
+     "response": "Your conversational message",
+     "grammarCard": {
+       "topic": "Grammar topic name",
+       "level": "CEFR level",
+       "explanation": "Clear explanation focusing on first principles",
+       "examples": ["Example 1", "Example 2"],
+       "situations": [
+         { "context": "Situation description", "usage": "How/why to use it" }
+       ],
+       "rulesChange": [
+         { "situation": "When context changes", "newRule": "How the rule adapts" }
+       ]
+     },
+     "testQuestion": {
+       "question": "Test question text",
+       "type": "multiple-choice" or "text-input",
+       "options": ["Option 1", "Option 2"] (for multiple-choice),
+       "correctAnswer": "Correct answer",
+       "explanation": "Why this is correct"
+     },
+     "isTestActive": boolean,
+     "progressUpdate": {
+       "topicId": "Grammar topic ID",
+       "isCorrect": boolean,
+       "xpGain": number
+     }
+   }
+
+Current Topic: ${context?.currentTopic || 'Not specified'}
+Chat History: ${JSON.stringify(context?.chatHistory || [])}
+
+Remember to:
+- Focus on understanding over memorization
+- Explain WHY rules work the way they do
+- Show how grammar reflects meaning and intent
+- Make connections between related concepts
+- Use real-world examples that resonate with learners`
 
     console.log('Making OpenAI API request...')
     
@@ -52,7 +99,7 @@ Be patient, encouraging, and focus on one or two key grammar points per response
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'gpt-4',
         messages: [
           {
             role: 'system',
@@ -64,7 +111,7 @@ Be patient, encouraging, and focus on one or two key grammar points per response
           }
         ],
         temperature: 0.7,
-        max_tokens: 800
+        max_tokens: 1000
       })
     })
 
@@ -89,7 +136,7 @@ Be patient, encouraging, and focus on one or two key grammar points per response
       throw new Error('No content in OpenAI response')
     }
 
-    // Try to parse as JSON, fallback to structured format
+    // Parse JSON response
     let parsedResponse
     try {
       parsedResponse = JSON.parse(responseContent)
@@ -97,27 +144,47 @@ Be patient, encouraging, and focus on one or two key grammar points per response
       console.log('Failed to parse as JSON, creating structured response:', parseError)
       parsedResponse = {
         response: responseContent,
-        corrections: [],
-        suggestions: [],
-        grammarScore: 85
+        grammarCard: null,
+        testQuestion: null,
+        isTestActive: false,
+        progressUpdate: null
       }
     }
 
-    // Ensure required fields exist
-    if (!parsedResponse.response) {
-      parsedResponse.response = responseContent
-    }
-    if (!parsedResponse.corrections) {
-      parsedResponse.corrections = []
-    }
-    if (!parsedResponse.suggestions) {
-      parsedResponse.suggestions = []
-    }
-    if (!parsedResponse.grammarScore) {
-      parsedResponse.grammarScore = 85
-    }
+    // Update user skills if there's a progress update
+    if (parsedResponse.progressUpdate && context?.user_id) {
+      try {
+        const { data: userSkill } = await supabaseClient
+          .from('user_skills')
+          .select('*')
+          .eq('user_id', context.user_id)
+          .eq('topic_id', parsedResponse.progressUpdate.topicId)
+          .single()
 
-    console.log('Returning parsed response:', parsedResponse)
+        const skillUpdate = {
+          user_id: context.user_id,
+          topic_id: parsedResponse.progressUpdate.topicId,
+          skill_level: userSkill 
+            ? Math.min(1, userSkill.skill_level + (parsedResponse.progressUpdate.isCorrect ? 0.1 : -0.05))
+            : parsedResponse.progressUpdate.isCorrect ? 0.6 : 0.4,
+          attempts_count: (userSkill?.attempts_count || 0) + 1,
+          last_practiced: new Date().toISOString()
+        }
+
+        if (userSkill) {
+          await supabaseClient
+            .from('user_skills')
+            .update(skillUpdate)
+            .eq('id', userSkill.id)
+        } else {
+          await supabaseClient
+            .from('user_skills')
+            .insert(skillUpdate)
+        }
+      } catch (error) {
+        console.error('Error updating user skills:', error)
+      }
+    }
 
     return new Response(
       JSON.stringify(parsedResponse),
@@ -130,9 +197,10 @@ Be patient, encouraging, and focus on one or two key grammar points per response
       JSON.stringify({ 
         error: error.message,
         response: "I'm having trouble right now. Please try again later.",
-        corrections: [],
-        suggestions: [],
-        grammarScore: null
+        grammarCard: null,
+        testQuestion: null,
+        isTestActive: false,
+        progressUpdate: null
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     )
