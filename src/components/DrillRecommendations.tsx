@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
-import { Target, CheckCircle, Clock, BookOpen, TrendingUp, Brain, Zap, Award } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Target, CheckCircle, Clock, BookOpen, TrendingUp, Brain, Zap, Award, HelpCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
@@ -16,6 +17,18 @@ interface Exercise {
   answer: string;
   explanation: string;
   difficulty: number;
+  grammarConcept?: {
+    name: string;
+    explanation: string;
+    examples: string[];
+    tips: string[];
+    commonMistakes: string[];
+    resources: Array<{
+      title: string;
+      type: string;
+      description: string;
+    }>;
+  };
 }
 
 interface Drill {
@@ -46,6 +59,9 @@ const DrillRecommendations = () => {
   const [drillScore, setDrillScore] = useState(0);
   const [loading, setLoading] = useState(false);
   const [personalizedDrills, setPersonalizedDrills] = useState<Drill[]>([]);
+  const [conceptDialogOpen, setConceptDialogOpen] = useState(false);
+  const [selectedConcept, setSelectedConcept] = useState<Exercise['grammarConcept'] | null>(null);
+  const [loadingConcept, setLoadingConcept] = useState(false);
 
   const staticDrills: Drill[] = [
     {
@@ -120,13 +136,12 @@ const DrillRecommendations = () => {
         body: { 
           action: 'personalized-recommendations',
           userLevel: profile.level,
-          weakTopics: ['Present Perfect', 'Conditionals'] // This would come from test results
+          weakTopics: ['Present Perfect', 'Conditionals']
         }
       });
 
       if (error) throw error;
       
-      // Convert AI recommendations to drill format
       const aiDrills = data.recommendations.map((rec: any, index: number) => ({
         id: 100 + index,
         topic: rec.topic,
@@ -157,7 +172,7 @@ const DrillRecommendations = () => {
           topic: drill.topic,
           level: drill.level,
           userLevel: profile?.level,
-          weakTopics: ['Present Perfect', 'Conditionals'] // This would come from user's weak areas
+          weakTopics: ['Present Perfect', 'Conditionals']
         }
       });
 
@@ -203,7 +218,6 @@ const DrillRecommendations = () => {
         setDrillScore(prev => prev + 1);
       }
 
-      // Update user XP
       if (profile && data.xpGained) {
         updateProfile({ xp: (profile.xp || 0) + data.xpGained });
       }
@@ -229,15 +243,11 @@ const DrillRecommendations = () => {
   const completeDrill = async () => {
     const finalScore = (drillScore / exercises.length) * 100;
     
-    // Update drill completion status
-    // In a real app, this would update the database
-    
     setDrillInProgress(false);
     setSelectedDrill(null);
     setExercises([]);
     setCurrentExercise(0);
     
-    // Show completion message
     alert(`Drill completed! Score: ${finalScore.toFixed(0)}%\nXP Earned: ${drillScore * 10}`);
   };
 
@@ -253,6 +263,78 @@ const DrillRecommendations = () => {
   const getPriorityIcon = (priority?: string) => {
     return priority === 'high' ? <Zap className="h-4 w-4 text-orange-500" /> : <Target className="h-4 w-4 text-blue-500" />;
   };
+
+  const fetchGrammarConcept = async (concept: string) => {
+    setLoadingConcept(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('drill-recommendations', {
+        body: { 
+          action: 'get-concept-explanation',
+          concept
+        }
+      });
+
+      if (error) throw error;
+      
+      setSelectedConcept({
+        name: concept,
+        explanation: data.explanation,
+        examples: data.examples || [],
+        tips: data.tips || [],
+        commonMistakes: data.commonMistakes || [],
+        resources: data.resources || []
+      });
+      setConceptDialogOpen(true);
+    } catch (error) {
+      console.error('Error fetching concept explanation:', error);
+    } finally {
+      setLoadingConcept(false);
+    }
+  };
+
+  const renderExercise = (exercise: Exercise) => (
+    <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 space-y-4">
+      <div className="flex justify-between items-start">
+        <h3 className="font-semibold text-lg">{exercise.question}</h3>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="flex items-center space-x-1 text-blue-600 hover:text-blue-800"
+          onClick={() => fetchGrammarConcept(exercise.grammarConcept?.name || exercise.type)}
+          disabled={loadingConcept}
+        >
+          <HelpCircle className="h-4 w-4" />
+          <span>Learn More</span>
+        </Button>
+      </div>
+
+      {exercise.type === 'multiple-choice' && exercise.options && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {exercise.options.map((option, index) => (
+            <Button
+              key={index}
+              variant={selectedOption === option ? "default" : "outline"}
+              className="justify-start h-auto py-3 px-4"
+              onClick={() => setSelectedOption(option)}
+              disabled={showFeedback}
+            >
+              {String.fromCharCode(65 + index)}) {option}
+            </Button>
+          ))}
+        </div>
+      )}
+
+      {exercise.type !== 'multiple-choice' && (
+        <Input
+          value={userAnswer}
+          onChange={(e) => setUserAnswer(e.target.value)}
+          placeholder="Type your answer here..."
+          disabled={showFeedback}
+          className="text-lg"
+        />
+      )}
+    </div>
+  );
 
   if (drillInProgress && selectedDrill && exercises.length > 0) {
     const currentExerciseData = exercises[currentExercise];
@@ -273,35 +355,7 @@ const DrillRecommendations = () => {
             <div className="text-sm text-gray-600">Score: {drillScore}/{currentExercise + (showFeedback ? 1 : 0)}</div>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-              <h3 className="font-semibold mb-4">{currentExerciseData.question}</h3>
-              
-              {currentExerciseData.type === 'multiple-choice' && currentExerciseData.options ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {currentExerciseData.options.map((option, index) => (
-                    <Button
-                      key={index}
-                      variant={selectedOption === option ? "default" : "outline"}
-                      className="justify-start h-auto py-3 px-4"
-                      onClick={() => setSelectedOption(option)}
-                      disabled={showFeedback}
-                    >
-                      {String.fromCharCode(65 + index)}) {option}
-                    </Button>
-                  ))}
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <Input
-                    value={userAnswer}
-                    onChange={(e) => setUserAnswer(e.target.value)}
-                    placeholder="Type your answer here..."
-                    disabled={showFeedback}
-                    className="text-lg"
-                  />
-                </div>
-              )}
-            </div>
+            {renderExercise(currentExerciseData)}
 
             {showFeedback && exerciseResult && (
               <div className={`p-4 rounded-lg border ${exerciseResult.isCorrect ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
@@ -346,6 +400,80 @@ const DrillRecommendations = () => {
             </div>
           </CardContent>
         </Card>
+
+        <Dialog open={conceptDialogOpen} onOpenChange={setConceptDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center space-x-2">
+                <BookOpen className="h-5 w-5 text-blue-500" />
+                <span>{selectedConcept?.name}</span>
+              </DialogTitle>
+              <DialogDescription>
+                Understanding the grammar concept
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-6">
+              <div className="prose prose-blue">
+                <h3 className="text-lg font-semibold text-blue-700">Explanation</h3>
+                <p className="text-gray-700">{selectedConcept?.explanation}</p>
+              </div>
+
+              {selectedConcept?.examples && selectedConcept.examples.length > 0 && (
+                <div className="bg-blue-50 rounded-lg p-4">
+                  <h4 className="font-semibold text-blue-700 mb-2">Examples</h4>
+                  <ul className="space-y-2">
+                    {selectedConcept.examples.map((example, index) => (
+                      <li key={index} className="text-blue-600">{example}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {selectedConcept?.tips && selectedConcept.tips.length > 0 && (
+                <div className="bg-green-50 rounded-lg p-4">
+                  <h4 className="font-semibold text-green-700 mb-2">Tips</h4>
+                  <ul className="space-y-2">
+                    {selectedConcept.tips.map((tip, index) => (
+                      <li key={index} className="text-green-600">
+                        <CheckCircle className="inline-block h-4 w-4 mr-2" />
+                        {tip}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {selectedConcept?.commonMistakes && selectedConcept.commonMistakes.length > 0 && (
+                <div className="bg-red-50 rounded-lg p-4">
+                  <h4 className="font-semibold text-red-700 mb-2">Common Mistakes to Avoid</h4>
+                  <ul className="space-y-2">
+                    {selectedConcept.commonMistakes.map((mistake, index) => (
+                      <li key={index} className="text-red-600">❌ {mistake}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {selectedConcept?.resources && selectedConcept.resources.length > 0 && (
+                <div className="border rounded-lg p-4">
+                  <h4 className="font-semibold text-gray-700 mb-2">Additional Resources</h4>
+                  <div className="grid gap-3">
+                    {selectedConcept.resources.map((resource, index) => (
+                      <div key={index} className="bg-gray-50 p-3 rounded-md">
+                        <div className="font-medium text-blue-600">{resource.title}</div>
+                        <div className="text-sm text-gray-600">{resource.description}</div>
+                        <Badge variant="outline" className="mt-1">
+                          {resource.type}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
@@ -357,7 +485,6 @@ const DrillRecommendations = () => {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      {/* Enhanced Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="flex items-center p-6">
@@ -399,7 +526,6 @@ const DrillRecommendations = () => {
         </Card>
       </div>
 
-      {/* AI Recommended Drills */}
       {personalizedDrills.length > 0 && (
         <Card>
           <CardHeader>
@@ -451,7 +577,6 @@ const DrillRecommendations = () => {
         </Card>
       )}
 
-      {/* Standard Recommended Drills */}
       {recommendedDrills.length > 0 && (
         <Card>
           <CardHeader>
@@ -503,7 +628,6 @@ const DrillRecommendations = () => {
         </Card>
       )}
 
-      {/* Completed Drills */}
       {completedDrills.length > 0 && (
         <Card>
           <CardHeader>
@@ -550,7 +674,6 @@ const DrillRecommendations = () => {
         </Card>
       )}
 
-      {/* Other Available Drills */}
       {otherDrills.length > 0 && (
         <Card>
           <CardHeader>
