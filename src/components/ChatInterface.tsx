@@ -8,8 +8,6 @@ import { MessageCircle, Send, Mic, MicOff, Volume2, Bot, User, Lightbulb, CheckC
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
-import { useAtom } from 'jotai';
-import { topicToDrillAtom } from '@/hooks/useGlobalUIState';
 
 interface Message {
   id: string;
@@ -37,7 +35,6 @@ const ChatInterface = () => {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const [topicToDrill] = useAtom(topicToDrillAtom);
 
   useEffect(() => {
     // Initialize speech recognition
@@ -75,14 +72,6 @@ const ChatInterface = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
-
-  useEffect(() => {
-    if (topicToDrill && inputRef.current) {
-      const prompt = `Can you help me understand and practice ${topicToDrill}? Please explain the concept and provide some examples.`;
-      inputRef.current.value = prompt;
-      sendMessage();
-    }
-  }, [topicToDrill]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

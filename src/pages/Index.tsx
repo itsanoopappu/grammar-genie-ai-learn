@@ -1,54 +1,31 @@
-import { Suspense, lazy } from 'react';
+import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MessageCircle, CheckCircle, Target, BookOpen } from 'lucide-react';
-import { AuthProvider, useAuth } from '@/hooks/useAuth';
+import ChatInterface from '@/components/ChatInterface';
+import PlacementTest from '@/components/PlacementTest';
+import DrillRecommendations from '@/components/DrillRecommendations';
+import AuthPage from '@/components/AuthPage';
 import { Header } from '@/components/Header';
-import { LoadingSpinner } from '@/components/LoadingSpinner';
-import { ErrorBoundary } from 'react-error-boundary';
-import { useAtom } from 'jotai';
-import { activeTabAtom } from '@/hooks/useGlobalUIState';
-
-// Lazy load components
-const AuthPage = lazy(() => import('@/components/AuthPage'));
-const ChatInterface = lazy(() => import('@/components/ChatInterface'));
-const PlacementTest = lazy(() => import('@/components/PlacementTest'));
-const DrillRecommendations = lazy(() => import('@/components/DrillRecommendations'));
-const GrammarTopics = lazy(() => import('@/components/GrammarTopics'));
-
-const ErrorFallback = ({ error, resetErrorBoundary }) => {
-  // Safely convert error message to string and provide a fallback
-  const errorMessage = error?.message ? String(error.message) : 'An unexpected error occurred';
-  
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-red-50">
-      <div className="text-center p-8 rounded-lg bg-white shadow-lg">
-        <h2 className="text-2xl font-bold text-red-600 mb-4">Something went wrong</h2>
-        <p className="text-gray-600 mb-4">{errorMessage}</p>
-        <button
-          onClick={resetErrorBoundary}
-          className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-        >
-          Try again
-        </button>
-      </div>
-    </div>
-  );
-};
+import { GrammarTopics } from '@/components/GrammarTopics';
+import { AuthProvider, useAuth } from '@/hooks/useAuth';
 
 const AppContent = () => {
   const { user, loading: authLoading } = useAuth();
-  const [activeTab, setActiveTab] = useAtom(activeTabAtom);
+  const [activeTab, setActiveTab] = useState('chat');
 
   if (authLoading) {
-    return <LoadingSpinner />;
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
   }
 
   if (!user) {
-    return (
-      <Suspense fallback={<LoadingSpinner />}>
-        <AuthPage onAuthSuccess={() => window.location.reload()} />
-      </Suspense>
-    );
+    return <AuthPage onAuthSuccess={() => window.location.reload()} />;
   }
 
   return (
@@ -75,31 +52,21 @@ const AppContent = () => {
             </TabsTrigger>
           </TabsList>
 
-          <ErrorBoundary FallbackComponent={ErrorFallback}>
-            <TabsContent value="chat">
-              <Suspense fallback={<LoadingSpinner />}>
-                <ChatInterface />
-              </Suspense>
-            </TabsContent>
+          <TabsContent value="chat">
+            <ChatInterface />
+          </TabsContent>
 
-            <TabsContent value="test">
-              <Suspense fallback={<LoadingSpinner />}>
-                <PlacementTest />
-              </Suspense>
-            </TabsContent>
+          <TabsContent value="test">
+            <PlacementTest />
+          </TabsContent>
 
-            <TabsContent value="drills">
-              <Suspense fallback={<LoadingSpinner />}>
-                <DrillRecommendations />
-              </Suspense>
-            </TabsContent>
+          <TabsContent value="drills">
+            <DrillRecommendations />
+          </TabsContent>
 
-            <TabsContent value="topics">
-              <Suspense fallback={<LoadingSpinner />}>
-                <GrammarTopics />
-              </Suspense>
-            </TabsContent>
-          </ErrorBoundary>
+          <TabsContent value="topics">
+            <GrammarTopics />
+          </TabsContent>
         </Tabs>
       </main>
     </div>

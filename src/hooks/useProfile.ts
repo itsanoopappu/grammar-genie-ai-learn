@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
@@ -16,7 +17,6 @@ export const useProfile = () => {
   const { user } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -29,28 +29,16 @@ export const useProfile = () => {
 
   const fetchProfile = async () => {
     try {
-      setError(null);
-      
-      // Check if Supabase client is properly initialized
-      if (!supabase) {
-        throw new Error('Supabase client is not initialized');
-      }
-
-      const { data, error: supabaseError } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user?.id)
         .single();
 
-      if (supabaseError) {
-        throw new Error(`Failed to fetch profile: ${supabaseError.message}`);
-      }
-
+      if (error) throw error;
       setProfile(data);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
-      setError(new Error(errorMessage));
-      console.error('Error fetching profile:', err);
+    } catch (error) {
+      console.error('Error fetching profile:', error);
     } finally {
       setLoading(false);
     }
@@ -58,35 +46,18 @@ export const useProfile = () => {
 
   const updateProfile = async (updates: Partial<Profile>) => {
     try {
-      setError(null);
-      
-      if (!user?.id) {
-        throw new Error('No authenticated user found');
-      }
-
-      const { error: updateError } = await supabase
+      const { error } = await supabase
         .from('profiles')
         .update(updates)
-        .eq('id', user.id);
+        .eq('id', user?.id);
 
-      if (updateError) {
-        throw new Error(`Failed to update profile: ${updateError.message}`);
-      }
+      if (error) throw error;
       
       setProfile(prev => prev ? { ...prev, ...updates } : null);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
-      setError(new Error(errorMessage));
-      console.error('Error updating profile:', err);
-      throw err; // Re-throw to allow handling by the caller
+    } catch (error) {
+      console.error('Error updating profile:', error);
     }
   };
 
-  return { 
-    profile, 
-    loading, 
-    error,
-    updateProfile, 
-    refetch: fetchProfile 
-  };
+  return { profile, loading, updateProfile, refetch: fetchProfile };
 };
