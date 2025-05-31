@@ -8,121 +8,194 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-import { ChevronDown, ChevronRight, BookOpen, Target, Zap } from 'lucide-react';
+import { ChevronDown, ChevronRight, BookOpen, Target, MessageCircle, Leaf, Sprout, Tree } from 'lucide-react';
 
-const grammarLevels = {
-  'A1': [
-    'Adjectives: common and demonstrative',
-    'Adverbs of frequency',
-    'Comparatives and superlatives',
-    'Going to',
-    'How much/how many and very',
-    'Common uncountable nouns',
-    'I\'d like',
-    'Imperatives (+/-)',
-    'Intensifiers - very basic',
-    'Modals: can/can\'t/could/couldn\'t',
-    'Past simple of "to be"',
-    'Past Simple',
-    'Possessive adjectives',
-    'Possessive s',
-    'Prepositions, common',
-    'Prepositions of place',
-    'Prepositions of time, including in/on/at',
-    'Present continuous',
-    'Present simple',
-    'Pronouns: simple, personal',
-    'Questions',
-    'There is/are',
-    'To be, including question+negatives',
-    'Verb + ing: like/hate/love'
-  ],
-  'A2': [
-    'Adjectives – comparative, use of than and definite article',
-    'Adjectives – superlative – use of definite article',
-    'Adverbial phrases of time, place and frequency',
-    'Adverbs of frequency',
-    'Articles with countable and uncountable nouns',
-    'Countables and Uncountables: much/many',
-    'Future Time (will and going to)',
-    'Gerunds',
-    'Going to',
-    'Imperatives',
-    'Modals – can/could',
-    'Modals – have to',
-    'Modals – should',
-    'Past continuous',
-    'Past simple',
-    'Phrasal verbs – common',
-    'Possessives – use of \'s, s\'',
-    'Prepositional phrases',
-    'Prepositions of time: on/in/at',
-    'Present continuous',
-    'Present continuous for future',
-    'Present perfect',
-    'Questions',
-    'Verb + ing/infinitive',
-    'Wh-questions in past',
-    'Zero and 1st conditional'
-  ],
-  'B1': [
-    'Adverbs',
-    'Broader range of intensifiers',
-    'Comparatives and superlatives',
-    'Complex question tags',
-    'Conditionals, 2nd and 3rd',
-    'Connecting words expressing cause and effect',
-    'Future continuous',
-    'Modals - must/can\'t deduction',
-    'Modals – might, may, will, probably',
-    'Modals – should have/might have/etc',
-    'Modals: must/have to',
-    'Past continuous',
-    'Past perfect',
-    'Past simple',
-    'Past tense responses',
-    'Phrasal verbs, extended',
-    'Present perfect continuous',
-    'Present perfect/past simple',
-    'Reported speech',
-    'Simple passive',
-    'Wh- questions in the past',
-    'Will and going to, for prediction'
-  ],
-  'B2': [
-    'Adjectives and adverbs',
-    'Future continuous',
-    'Future perfect',
-    'Future perfect continuous',
-    'Mixed conditionals',
-    'Modals – can\'t have, needn\'t have',
-    'Modals of deduction and speculation',
-    'Narrative tenses',
-    'Passives',
-    'Past perfect',
-    'Past perfect continuous',
-    'Phrasal verbs, extended',
-    'Relative clauses',
-    'Reported speech',
-    'Will and going to, for prediction',
-    'Wish',
-    'Would expressing habits, in the past'
-  ],
-  'C1': [
-    'Futures (revision)',
-    'Inversion with negative adverbials',
-    'Mixed conditionals in past, present and future',
-    'Modals in the past',
-    'Narrative tenses for experience, incl. passive',
-    'Passive forms, all',
-    'Phrasal verbs, especially splitting',
-    'Wish/if only regrets'
-  ]
+const grammarStructure = {
+  beginner: {
+    icon: Sprout,
+    title: '🌱 Beginner Level (A1–A2 CEFR)',
+    description: 'Build basic sentence structures and foundational grammar.',
+    sections: [
+      {
+        title: '1. Parts of Speech Introduction',
+        topics: [
+          'Nouns: singular/plural, countable/uncountable',
+          'Pronouns: subject, object, possessive, reflexive',
+          'Verbs: base form, "to be", simple present',
+          'Adjectives: basic description, order of adjectives',
+          'Adverbs: of time, place, manner',
+          'Prepositions: in, on, at, under, next to',
+          'Articles: a, an, the',
+          'Conjunctions: and, but, or'
+        ]
+      },
+      {
+        title: '2. Sentence Basics',
+        topics: [
+          'Subject-verb-object structure',
+          'Affirmative and negative sentences',
+          'Question formation with "do/does"',
+          'Capitalization and punctuation'
+        ]
+      },
+      {
+        title: '3. Tenses – Basic',
+        topics: [
+          'Simple Present',
+          'Present Continuous',
+          'Simple Past',
+          'Past Continuous'
+        ]
+      },
+      {
+        title: '4. Noun & Verb Agreement',
+        topics: [
+          'Singular/plural subject-verb agreement',
+          'Irregular verbs list (basic)'
+        ]
+      },
+      {
+        title: '5. Questions & Negations',
+        topics: [
+          'Yes/No questions',
+          'WH-questions',
+          'Negative sentences with do/does/did'
+        ]
+      }
+    ]
+  },
+  intermediate: {
+    icon: Leaf,
+    title: '🌿 Intermediate Level (B1–B2 CEFR)',
+    description: 'Improve sentence complexity, variety, and accuracy.',
+    sections: [
+      {
+        title: '1. Tenses – Intermediate',
+        topics: [
+          'Present Perfect',
+          'Present Perfect Continuous',
+          'Past Perfect',
+          'Future: will / going to / present continuous',
+          'Mixed tense usage'
+        ]
+      },
+      {
+        title: '2. Complex Sentences',
+        topics: [
+          'Compound & complex sentence formation',
+          'Use of subordinating conjunctions: because, although, since, unless'
+        ]
+      },
+      {
+        title: '3. Modals',
+        topics: [
+          'Can, could, may, might, must, should, shall, would',
+          'Modals for advice, obligation, possibility, permission'
+        ]
+      },
+      {
+        title: '4. Conditionals',
+        topics: [
+          'Zero, First, Second Conditionals',
+          'Introduction to Third Conditional'
+        ]
+      },
+      {
+        title: '5. Comparatives and Superlatives',
+        topics: [
+          'Regular and irregular adjectives',
+          'Using "more" and "most"'
+        ]
+      },
+      {
+        title: '6. Passive Voice',
+        topics: [
+          'Simple present and past',
+          'Intro to passive with other tenses'
+        ]
+      },
+      {
+        title: '7. Gerunds and Infinitives',
+        topics: [
+          'Verb + -ing',
+          'Verb + to + base verb',
+          'Common verb patterns'
+        ]
+      }
+    ]
+  },
+  advanced: {
+    icon: Tree,
+    title: '🌳 Advanced Level (C1–C2 CEFR)',
+    description: 'Polish grammar for fluency, precision, and nuance.',
+    sections: [
+      {
+        title: '1. All Tenses Mastery',
+        topics: [
+          'Advanced usage of all 12 tenses',
+          'Perfect and perfect continuous forms',
+          'Future perfect and future perfect continuous'
+        ]
+      },
+      {
+        title: '2. Advanced Modals & Conditionals',
+        topics: [
+          'Third Conditional (regrets)',
+          'Mixed Conditionals',
+          'Modal verbs in the past (should have, might have)'
+        ]
+      },
+      {
+        title: '3. Complex Structures',
+        topics: [
+          'Inversion (Never have I seen…)',
+          'Emphatic structures (It is you who…)',
+          'Ellipsis and substitution'
+        ]
+      },
+      {
+        title: '4. Reported Speech',
+        topics: [
+          'Statements, questions, and commands',
+          'Changes in pronouns, tenses, time expressions'
+        ]
+      },
+      {
+        title: '5. Relative Clauses',
+        topics: [
+          'Defining and non-defining',
+          'Use of who, which, that, whose'
+        ]
+      },
+      {
+        title: '6. Advanced Passive',
+        topics: [
+          'Passive in all tenses',
+          'Passive with modals',
+          'Passive with reporting verbs'
+        ]
+      },
+      {
+        title: '7. Phrasal Verbs & Idioms',
+        topics: [
+          'Separable and inseparable phrasal verbs',
+          'Idiomatic expressions by context (business, casual, academic)'
+        ]
+      },
+      {
+        title: '8. Nominalization & Formal Grammar',
+        topics: [
+          'Turning verbs/adjectives into nouns',
+          'Use in academic/formal writing'
+        ]
+      }
+    ]
+  }
 };
 
 export function GrammarTopics() {
   const [openLevel, setOpenLevel] = useState<string | null>(null);
-  const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
+  const [openSection, setOpenSection] = useState<string | null>(null);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -130,87 +203,91 @@ export function GrammarTopics() {
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
             <BookOpen className="h-5 w-5 text-blue-600" />
-            <span>Grammar Topics by Level</span>
+            <span>English Grammar Topics</span>
           </CardTitle>
           <CardDescription>
-            Comprehensive overview of English grammar from beginner to advanced levels
+            Comprehensive guide from beginner to advanced levels
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {Object.entries(grammarLevels).map(([level, topics]) => (
-              <Card key={level} className="border-2">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <Badge variant="secondary" className="bg-blue-100 text-blue-700">
-                      Level {level}
-                    </Badge>
-                    <Badge variant="outline">
-                      {topics.length} topics
-                    </Badge>
+        <CardContent className="space-y-6">
+          {Object.entries(grammarStructure).map(([level, { icon: Icon, title, description, sections }]) => (
+            <Card key={level} className="border-2">
+              <CardHeader className="pb-3">
+                <div className="flex items-center space-x-2">
+                  <Icon className="h-5 w-5 text-green-600" />
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold">{title}</h3>
+                    <p className="text-sm text-gray-600">{description}</p>
                   </div>
-                </CardHeader>
-                <CardContent>
-                  <Collapsible
-                    open={openLevel === level}
-                    onOpenChange={() => setOpenLevel(openLevel === level ? null : level)}
-                  >
-                    <CollapsibleTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        className="w-full justify-between mb-2"
-                      >
-                        <span>View Topics</span>
-                        {openLevel === level ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <ScrollArea className="h-[300px]">
-                        <div className="space-y-2">
-                          {topics.map((topic) => (
-                            <div
-                              key={topic}
-                              className="flex items-center justify-between p-2 rounded-lg hover:bg-accent transition-colors"
-                            >
-                              <span className="text-sm">{topic}</span>
-                              <div className="flex space-x-2">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-7 w-7 p-0"
-                                  onClick={() => {
-                                    // Navigate to practice tab with this topic
-                                    document.querySelector('[data-state="inactive"][value="drills"]')?.click();
-                                  }}
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Collapsible
+                  open={openLevel === level}
+                  onOpenChange={() => setOpenLevel(openLevel === level ? null : level)}
+                >
+                  <CollapsibleTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      className="w-full justify-between mb-2"
+                    >
+                      <span>View Topics</span>
+                      {openLevel === level ? (
+                        <ChevronDown className="h-4 w-4" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <ScrollArea className="h-[500px] pr-4">
+                      <div className="space-y-4">
+                        {sections.map((section) => (
+                          <div key={section.title} className="space-y-2">
+                            <h4 className="font-semibold text-blue-600">{section.title}</h4>
+                            <div className="pl-4 space-y-2">
+                              {section.topics.map((topic) => (
+                                <div
+                                  key={topic}
+                                  className="flex items-center justify-between p-2 rounded-lg hover:bg-accent transition-colors"
                                 >
-                                  <Target className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-7 w-7 p-0"
-                                  onClick={() => {
-                                    // Navigate to chat tab with this topic
-                                    document.querySelector('[data-state="inactive"][value="chat"]')?.click();
-                                  }}
-                                >
-                                  <Zap className="h-4 w-4" />
-                                </Button>
-                              </div>
+                                  <span className="text-sm">{topic}</span>
+                                  <div className="flex space-x-2">
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 w-7 p-0"
+                                      onClick={() => {
+                                        document.querySelector('[data-state="inactive"][value="drills"]')?.click();
+                                      }}
+                                    >
+                                      <Target className="h-4 w-4" />
+                                      <span className="sr-only">Practice</span>
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 w-7 p-0"
+                                      onClick={() => {
+                                        document.querySelector('[data-state="inactive"][value="chat"]')?.click();
+                                      }}
+                                    >
+                                      <MessageCircle className="h-4 w-4" />
+                                      <span className="sr-only">Discuss</span>
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
-                      </ScrollArea>
-                    </CollapsibleContent>
-                  </Collapsible>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </CollapsibleContent>
+                </Collapsible>
+              </CardContent>
+            </Card>
+          ))}
         </CardContent>
       </Card>
     </div>
