@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Target, TrendingUp, BookOpen, Brain, Zap, Award, Clock, CheckCircle, AlertCircle } from 'lucide-react';
 import { useIntelligentTutor } from '@/hooks/useIntelligentTutor';
 import { useSmartPractice } from '@/hooks/useSmartPractice';
+import { supabase } from '@/integrations/supabase/client';
 import LoadingState from './LoadingState';
 import ErrorDisplay from './ErrorDisplay';
 
