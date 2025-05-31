@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { BookOpen, MessageCircle, User, CheckCircle, Trophy, Zap, Target } from 'lucide-react';
+import { BookOpen, MessageCircle, User, CheckCircle, Trophy, Zap, Target, TrendingUp } from 'lucide-react';
 import ChatInterface from '@/components/ChatInterface';
 import PlacementTest from '@/components/PlacementTest';
 import UserProfile from '@/components/UserProfile';
