@@ -218,7 +218,7 @@ export function GrammarTopics() {
     switch (status) {
       case 'mastered':
         return (
-          <Badge variant="secondary\" className="bg-green-100 text-green-700">
+          <Badge variant="secondary" className="bg-green-100 text-green-700">
             <CheckCircle className="h-3 w-3 mr-1" />
             Mastered
           </Badge>
