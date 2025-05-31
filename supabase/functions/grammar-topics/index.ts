@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -166,20 +165,20 @@ async function generateExercises(supabaseClient, topicId) {
         messages: [
           {
             role: 'system',
-            content: 'You are an expert English grammar exercise creator. Always ensure each exercise has a valid correctAnswer field.'
+            content: 'You are an expert English grammar exercise creator. Always ensure each exercise has a valid correct_answer field.'
           },
           {
             role: 'user',
             content: `Create 5 exercises for the topic: ${topic.name} (${topic.level})
             Include different types (multiple-choice, fill-blank, transformation).
-            IMPORTANT: Always include a correctAnswer field with a non-empty string value.
+            IMPORTANT: Always include a correct_answer field (snake_case) with a non-empty string value.
             Format as JSON array with:
             {
               type: exercise type,
               content: {
                 question: text,
                 options: [] (for multiple-choice),
-                correctAnswer: string (REQUIRED - never empty),
+                correct_answer: string (REQUIRED - never empty, use snake_case),
                 explanation: string
               },
               difficulty_level: 1-10
@@ -198,7 +197,7 @@ async function generateExercises(supabaseClient, topicId) {
 
     console.log('Raw AI exercises:', JSON.stringify(exercises, null, 2));
 
-    // Enhanced validation and filtering
+    // Enhanced validation and filtering with support for both field names
     exercises = exercises.filter((exercise, index) => {
       console.log(`Validating exercise ${index}:`, exercise);
       
@@ -230,10 +229,11 @@ async function generateExercises(supabaseClient, topicId) {
         return false;
       }
 
-      // Critical: Ensure correctAnswer exists and is a non-empty string
-      let correctAnswer = content.correctAnswer || content.correct_answer;
+      // Critical: Ensure correct_answer exists and is a non-empty string
+      // Support both correct_answer and correctAnswer for compatibility
+      let correctAnswer = content.correct_answer || content.correctAnswer;
       if (!correctAnswer || typeof correctAnswer !== 'string' || correctAnswer.trim() === '') {
-        console.log(`Exercise ${index} failed: missing or invalid correctAnswer`);
+        console.log(`Exercise ${index} failed: missing or invalid correct_answer`);
         return false;
       }
 
@@ -255,10 +255,10 @@ async function generateExercises(supabaseClient, topicId) {
       throw new Error('No valid exercises were generated');
     }
 
-    // Transform and insert valid exercises into database
+    // Transform and insert valid exercises into database with consistent field naming
     const exercisesToInsert = exercises.map(ex => {
-      // Ensure correctAnswer is properly mapped
-      const correctAnswer = ex.content.correctAnswer || ex.content.correct_answer;
+      // Ensure correct_answer is properly mapped and use snake_case
+      const correctAnswer = ex.content.correct_answer || ex.content.correctAnswer;
       
       return {
         type: ex.type,
@@ -267,7 +267,7 @@ async function generateExercises(supabaseClient, topicId) {
         content: {
           question: ex.content.question,
           options: ex.content.options || [],
-          correctAnswer: correctAnswer, // Ensure this is always present
+          correct_answer: correctAnswer, // Use snake_case to match database
           explanation: ex.content.explanation || 'No explanation provided'
         }
       };

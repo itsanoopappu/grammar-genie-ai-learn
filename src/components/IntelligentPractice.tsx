@@ -18,7 +18,8 @@ interface Exercise {
   content: {
     question: string;
     options?: string[];
-    correctAnswer: string;
+    correctAnswer?: string;
+    correct_answer?: string;
     explanation: string;
     hints?: string[];
   };
@@ -42,6 +43,11 @@ const IntelligentPractice: React.FC<IntelligentPracticeProps> = ({ topicId }) =>
   const [feedback, setFeedback] = useState<any>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Helper function to get the correct answer regardless of field name
+  const getCorrectAnswer = (exercise: Exercise) => {
+    return exercise.content?.correctAnswer || exercise.content?.correct_answer || '';
+  };
 
   useEffect(() => {
     if (topicId) {
@@ -73,15 +79,17 @@ const IntelligentPractice: React.FC<IntelligentPracticeProps> = ({ topicId }) =>
         throw new Error('No exercises were returned from the server');
       }
 
-      // Validate exercises data
+      // Validate exercises data with support for both field names
       const validExercises = data.exercises.filter((exercise: any) => {
         if (!exercise || !exercise.content) {
           console.warn('Invalid exercise structure:', exercise);
           return false;
         }
         
-        if (!exercise.content.correctAnswer) {
-          console.warn('Exercise missing correctAnswer:', exercise);
+        // Check for either correctAnswer or correct_answer
+        const correctAnswer = exercise.content.correctAnswer || exercise.content.correct_answer;
+        if (!correctAnswer || typeof correctAnswer !== 'string' || correctAnswer.trim() === '') {
+          console.warn('Exercise missing correctAnswer/correct_answer:', exercise);
           return false;
         }
         
@@ -132,8 +140,8 @@ const IntelligentPractice: React.FC<IntelligentPracticeProps> = ({ topicId }) =>
       return;
     }
 
-    // Enhanced defensive check for correctAnswer
-    const correctAnswer = currentExercise.content?.correctAnswer;
+    // Enhanced defensive check for correctAnswer - handle both field names
+    const correctAnswer = getCorrectAnswer(currentExercise);
     if (!correctAnswer || typeof correctAnswer !== 'string' || correctAnswer.trim() === '') {
       console.error('Current exercise missing or invalid correctAnswer:', currentExercise);
       setError('This exercise has invalid data. Please try the next exercise.');
@@ -288,8 +296,9 @@ const IntelligentPractice: React.FC<IntelligentPracticeProps> = ({ topicId }) =>
     );
   }
 
-  // Additional safety check for exercise data
-  if (!currentExercise.content || !currentExercise.content.correctAnswer) {
+  // Additional safety check for exercise data with support for both field names
+  const correctAnswer = getCorrectAnswer(currentExercise);
+  if (!currentExercise.content || !correctAnswer) {
     return (
       <div className="text-center p-4">
         <div className="flex items-center justify-center mb-4">
