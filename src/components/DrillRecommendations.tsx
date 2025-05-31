@@ -1,9 +1,22 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Target, CheckCircle, Clock, BookOpen, TrendingUp } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Target, CheckCircle, Clock, BookOpen, TrendingUp, Brain, Zap, Award } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { useProfile } from '@/hooks/useProfile';
+
+interface Exercise {
+  type: 'fill-blank' | 'multiple-choice' | 'transformation';
+  question: string;
+  options?: string[];
+  answer: string;
+  explanation: string;
+  difficulty: number;
+}
 
 interface Drill {
   id: number;
@@ -15,32 +28,49 @@ interface Drill {
   completed: boolean;
   score?: number;
   recommended: boolean;
+  priority?: 'high' | 'normal';
+  reason?: string;
 }
 
 const DrillRecommendations = () => {
+  const { user } = useAuth();
+  const { profile, updateProfile } = useProfile();
   const [selectedDrill, setSelectedDrill] = useState<Drill | null>(null);
   const [drillInProgress, setDrillInProgress] = useState(false);
+  const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [currentExercise, setCurrentExercise] = useState(0);
+  const [userAnswer, setUserAnswer] = useState('');
+  const [selectedOption, setSelectedOption] = useState('');
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [exerciseResult, setExerciseResult] = useState<any>(null);
+  const [drillScore, setDrillScore] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [personalizedDrills, setPersonalizedDrills] = useState<Drill[]>([]);
 
-  const drills: Drill[] = [
+  const staticDrills: Drill[] = [
     {
       id: 1,
       topic: 'Present Perfect Tense',
       level: 'B1',
-      description: 'Practice using present perfect tense in various contexts',
+      description: 'Master the present perfect tense with real-world examples',
       estimatedTime: 15,
       difficulty: 'Medium',
       completed: false,
-      recommended: true
+      recommended: true,
+      priority: 'high',
+      reason: 'Essential for intermediate level'
     },
     {
       id: 2,
       topic: 'Conditional Sentences',
       level: 'B2',
-      description: 'Master all types of conditional sentences',
+      description: 'Practice all types of conditional sentences',
       estimatedTime: 20,
       difficulty: 'Hard',
       completed: false,
-      recommended: true
+      recommended: true,
+      priority: 'high',
+      reason: 'Challenging but important for fluency'
     },
     {
       id: 3,
@@ -72,19 +102,143 @@ const DrillRecommendations = () => {
       estimatedTime: 18,
       difficulty: 'Medium',
       completed: false,
-      recommended: true
+      recommended: true,
+      priority: 'normal',
+      reason: 'Good for expanding expression'
     }
   ];
 
-  const startDrill = (drill: Drill) => {
-    setSelectedDrill(drill);
-    setDrillInProgress(true);
+  useEffect(() => {
+    loadPersonalizedRecommendations();
+  }, [profile]);
+
+  const loadPersonalizedRecommendations = async () => {
+    if (!profile) return;
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('drill-recommendations', {
+        body: { 
+          action: 'personalized-recommendations',
+          userLevel: profile.level,
+          weakTopics: ['Present Perfect', 'Conditionals'] // This would come from test results
+        }
+      });
+
+      if (error) throw error;
+      
+      // Convert AI recommendations to drill format
+      const aiDrills = data.recommendations.map((rec: any, index: number) => ({
+        id: 100 + index,
+        topic: rec.topic,
+        level: profile.level,
+        description: `AI-recommended practice for ${rec.topic}`,
+        estimatedTime: rec.estimatedTime || 15,
+        difficulty: rec.difficulty === 'easy' ? 'Easy' : rec.difficulty === 'hard' ? 'Hard' : 'Medium',
+        completed: false,
+        recommended: true,
+        priority: rec.priority,
+        reason: rec.reason
+      }));
+      
+      setPersonalizedDrills(aiDrills);
+    } catch (error) {
+      console.error('Error loading personalized recommendations:', error);
+    }
   };
 
-  const completeDrill = () => {
+  const startDrill = async (drill: Drill) => {
+    setSelectedDrill(drill);
+    setLoading(true);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('drill-recommendations', {
+        body: { 
+          action: 'generate',
+          topic: drill.topic,
+          level: drill.level,
+          userLevel: profile?.level,
+          weakTopics: ['Present Perfect', 'Conditionals'] // This would come from user's weak areas
+        }
+      });
+
+      if (error) throw error;
+      
+      setExercises(data.exercises || []);
+      setCurrentExercise(0);
+      setDrillInProgress(true);
+      setDrillScore(0);
+      setUserAnswer('');
+      setSelectedOption('');
+      setShowFeedback(false);
+    } catch (error) {
+      console.error('Error starting drill:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const submitAnswer = async () => {
+    const currentExerciseData = exercises[currentExercise];
+    const answer = currentExerciseData.type === 'multiple-choice' ? selectedOption : userAnswer;
+    
+    if (!answer.trim()) return;
+
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('drill-recommendations', {
+        body: { 
+          action: 'evaluate',
+          userAnswer: answer,
+          correctAnswer: currentExerciseData.answer,
+          topic: selectedDrill?.topic
+        }
+      });
+
+      if (error) throw error;
+      
+      setExerciseResult(data);
+      setShowFeedback(true);
+      
+      if (data.isCorrect) {
+        setDrillScore(prev => prev + 1);
+      }
+
+      // Update user XP
+      if (profile && data.xpGained) {
+        updateProfile({ xp: (profile.xp || 0) + data.xpGained });
+      }
+    } catch (error) {
+      console.error('Error evaluating answer:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const nextExercise = () => {
+    if (currentExercise < exercises.length - 1) {
+      setCurrentExercise(prev => prev + 1);
+      setUserAnswer('');
+      setSelectedOption('');
+      setShowFeedback(false);
+      setExerciseResult(null);
+    } else {
+      completeDrill();
+    }
+  };
+
+  const completeDrill = async () => {
+    const finalScore = (drillScore / exercises.length) * 100;
+    
+    // Update drill completion status
+    // In a real app, this would update the database
+    
     setDrillInProgress(false);
     setSelectedDrill(null);
-    // In a real app, this would update the drill completion status
+    setExercises([]);
+    setCurrentExercise(0);
+    
+    // Show completion message
+    alert(`Drill completed! Score: ${finalScore.toFixed(0)}%\nXP Earned: ${drillScore * 10}`);
   };
 
   const getDifficultyColor = (difficulty: string) => {
@@ -96,48 +250,98 @@ const DrillRecommendations = () => {
     }
   };
 
-  if (drillInProgress && selectedDrill) {
+  const getPriorityIcon = (priority?: string) => {
+    return priority === 'high' ? <Zap className="h-4 w-4 text-orange-500" /> : <Target className="h-4 w-4 text-blue-500" />;
+  };
+
+  if (drillInProgress && selectedDrill && exercises.length > 0) {
+    const currentExerciseData = exercises[currentExercise];
+    
     return (
       <div className="max-w-4xl mx-auto">
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <Target className="h-5 w-5 text-blue-500" />
-              <span>{selectedDrill.topic}</span>
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center space-x-2">
+                <Brain className="h-5 w-5 text-purple-500" />
+                <span>{selectedDrill.topic}</span>
+              </CardTitle>
+              <Badge variant="outline">{currentExercise + 1} of {exercises.length}</Badge>
+            </div>
             <CardDescription>{selectedDrill.description}</CardDescription>
-            <Progress value={30} className="mt-2" />
-            <div className="text-sm text-gray-600">Progress: 3 of 10 questions</div>
+            <Progress value={((currentExercise + 1) / exercises.length) * 100} className="mt-2" />
+            <div className="text-sm text-gray-600">Score: {drillScore}/{currentExercise + (showFeedback ? 1 : 0)}</div>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-              <h3 className="font-semibold mb-4">Complete the sentence with the correct present perfect form:</h3>
-              <p className="text-lg mb-4">
-                "I _____ (never/see) such a beautiful sunset before."
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <Button variant="outline" className="justify-start">
-                  A) never saw
-                </Button>
-                <Button variant="outline" className="justify-start">
-                  B) have never seen
-                </Button>
-                <Button variant="outline" className="justify-start">
-                  C) never have seen
-                </Button>
-                <Button variant="outline" className="justify-start">
-                  D) am never seeing
-                </Button>
-              </div>
+              <h3 className="font-semibold mb-4">{currentExerciseData.question}</h3>
+              
+              {currentExerciseData.type === 'multiple-choice' && currentExerciseData.options ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {currentExerciseData.options.map((option, index) => (
+                    <Button
+                      key={index}
+                      variant={selectedOption === option ? "default" : "outline"}
+                      className="justify-start h-auto py-3 px-4"
+                      onClick={() => setSelectedOption(option)}
+                      disabled={showFeedback}
+                    >
+                      {String.fromCharCode(65 + index)}) {option}
+                    </Button>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <Input
+                    value={userAnswer}
+                    onChange={(e) => setUserAnswer(e.target.value)}
+                    placeholder="Type your answer here..."
+                    disabled={showFeedback}
+                    className="text-lg"
+                  />
+                </div>
+              )}
             </div>
 
+            {showFeedback && exerciseResult && (
+              <div className={`p-4 rounded-lg border ${exerciseResult.isCorrect ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                <div className="flex items-center space-x-2 mb-2">
+                  {exerciseResult.isCorrect ? (
+                    <CheckCircle className="h-5 w-5 text-green-500" />
+                  ) : (
+                    <Target className="h-5 w-5 text-red-500" />
+                  )}
+                  <span className={`font-semibold ${exerciseResult.isCorrect ? 'text-green-700' : 'text-red-700'}`}>
+                    {exerciseResult.isCorrect ? 'Correct!' : 'Not quite right'}
+                  </span>
+                </div>
+                <p className="text-sm mb-2">{exerciseResult.feedback}</p>
+                <p className="text-xs text-gray-600">{currentExerciseData.explanation}</p>
+                {exerciseResult.xpGained && (
+                  <Badge className="mt-2 bg-yellow-100 text-yellow-700">
+                    +{exerciseResult.xpGained} XP
+                  </Badge>
+                )}
+              </div>
+            )}
+
             <div className="flex justify-between">
-              <Button variant="outline" onClick={completeDrill}>
+              <Button variant="outline" onClick={() => {
+                setDrillInProgress(false);
+                setSelectedDrill(null);
+              }}>
                 Exit Drill
               </Button>
               <div className="space-x-2">
-                <Button variant="outline">Skip Question</Button>
-                <Button>Submit Answer</Button>
+                {!showFeedback ? (
+                  <Button onClick={submitAnswer} disabled={loading || (!userAnswer.trim() && !selectedOption)}>
+                    {loading ? 'Checking...' : 'Submit Answer'}
+                  </Button>
+                ) : (
+                  <Button onClick={nextExercise}>
+                    {currentExercise === exercises.length - 1 ? 'Complete Drill' : 'Next Exercise'}
+                  </Button>
+                )}
               </div>
             </div>
           </CardContent>
@@ -146,14 +350,24 @@ const DrillRecommendations = () => {
     );
   }
 
-  const recommendedDrills = drills.filter(drill => drill.recommended);
-  const completedDrills = drills.filter(drill => drill.completed);
-  const otherDrills = drills.filter(drill => !drill.recommended && !drill.completed);
+  const allDrills = [...personalizedDrills, ...staticDrills];
+  const recommendedDrills = allDrills.filter(drill => drill.recommended);
+  const completedDrills = allDrills.filter(drill => drill.completed);
+  const otherDrills = allDrills.filter(drill => !drill.recommended && !drill.completed);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      {/* Overview Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Enhanced Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="flex items-center p-6">
+            <Brain className="h-8 w-8 text-purple-500 mr-3" />
+            <div>
+              <div className="text-2xl font-bold">{personalizedDrills.length}</div>
+              <div className="text-sm text-gray-600">AI Recommended</div>
+            </div>
+          </CardContent>
+        </Card>
         <Card>
           <CardContent className="flex items-center p-6">
             <Target className="h-8 w-8 text-blue-500 mr-3" />
@@ -174,7 +388,7 @@ const DrillRecommendations = () => {
         </Card>
         <Card>
           <CardContent className="flex items-center p-6">
-            <TrendingUp className="h-8 w-8 text-purple-500 mr-3" />
+            <TrendingUp className="h-8 w-8 text-orange-500 mr-3" />
             <div>
               <div className="text-2xl font-bold">
                 {completedDrills.length > 0 ? Math.round(completedDrills.reduce((acc, drill) => acc + (drill.score || 0), 0) / completedDrills.length) : 0}%
@@ -185,16 +399,68 @@ const DrillRecommendations = () => {
         </Card>
       </div>
 
-      {/* Recommended Drills */}
+      {/* AI Recommended Drills */}
+      {personalizedDrills.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <Brain className="h-5 w-5 text-purple-500" />
+              <span>AI Personalized for You</span>
+            </CardTitle>
+            <CardDescription>
+              Drills tailored to your learning level and progress
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {personalizedDrills.map((drill) => (
+                <Card key={drill.id} className="border-purple-200 bg-purple-50">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <Badge variant="secondary">{drill.level}</Badge>
+                      <div className="flex items-center space-x-1">
+                        {getPriorityIcon(drill.priority)}
+                        <Badge className={getDifficultyColor(drill.difficulty)}>
+                          {drill.difficulty}
+                        </Badge>
+                      </div>
+                    </div>
+                    <CardTitle className="text-lg">{drill.topic}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <p className="text-sm text-gray-600">{drill.description}</p>
+                    {drill.reason && (
+                      <p className="text-xs text-purple-600 italic">{drill.reason}</p>
+                    )}
+                    <div className="flex items-center text-sm text-gray-500">
+                      <Clock className="h-4 w-4 mr-1" />
+                      {drill.estimatedTime} minutes
+                    </div>
+                    <Button 
+                      className="w-full bg-purple-600 hover:bg-purple-700" 
+                      onClick={() => startDrill(drill)}
+                      disabled={loading}
+                    >
+                      {loading ? 'Loading...' : 'Start AI Drill'}
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Standard Recommended Drills */}
       {recommendedDrills.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
               <Target className="h-5 w-5 text-blue-500" />
-              <span>Recommended for You</span>
+              <span>Recommended Practice</span>
             </CardTitle>
             <CardDescription>
-              Based on your recent performance and learning goals
+              Essential topics for your current level
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -204,14 +470,20 @@ const DrillRecommendations = () => {
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">
                       <Badge variant="secondary">{drill.level}</Badge>
-                      <Badge className={getDifficultyColor(drill.difficulty)}>
-                        {drill.difficulty}
-                      </Badge>
+                      <div className="flex items-center space-x-1">
+                        {getPriorityIcon(drill.priority)}
+                        <Badge className={getDifficultyColor(drill.difficulty)}>
+                          {drill.difficulty}
+                        </Badge>
+                      </div>
                     </div>
                     <CardTitle className="text-lg">{drill.topic}</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <p className="text-sm text-gray-600">{drill.description}</p>
+                    {drill.reason && (
+                      <p className="text-xs text-blue-600 italic">{drill.reason}</p>
+                    )}
                     <div className="flex items-center text-sm text-gray-500">
                       <Clock className="h-4 w-4 mr-1" />
                       {drill.estimatedTime} minutes
@@ -219,8 +491,9 @@ const DrillRecommendations = () => {
                     <Button 
                       className="w-full" 
                       onClick={() => startDrill(drill)}
+                      disabled={loading}
                     >
-                      Start Drill
+                      {loading ? 'Loading...' : 'Start Practice'}
                     </Button>
                   </CardContent>
                 </Card>
@@ -235,11 +508,11 @@ const DrillRecommendations = () => {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
-              <CheckCircle className="h-5 w-5 text-green-500" />
+              <Award className="h-5 w-5 text-green-500" />
               <span>Completed Drills</span>
             </CardTitle>
             <CardDescription>
-              Review your past performance and retake if needed
+              Review your achievements and retake for better scores
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -265,8 +538,9 @@ const DrillRecommendations = () => {
                       variant="outline" 
                       className="w-full"
                       onClick={() => startDrill(drill)}
+                      disabled={loading}
                     >
-                      Retake Drill
+                      {loading ? 'Loading...' : 'Practice Again'}
                     </Button>
                   </CardContent>
                 </Card>
@@ -282,10 +556,10 @@ const DrillRecommendations = () => {
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
               <BookOpen className="h-5 w-5 text-gray-500" />
-              <span>All Drills</span>
+              <span>More Practice Topics</span>
             </CardTitle>
             <CardDescription>
-              Explore additional grammar topics
+              Explore additional grammar areas
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -311,8 +585,9 @@ const DrillRecommendations = () => {
                       variant="outline" 
                       className="w-full"
                       onClick={() => startDrill(drill)}
+                      disabled={loading}
                     >
-                      Start Drill
+                      {loading ? 'Loading...' : 'Start Practice'}
                     </Button>
                   </CardContent>
                 </Card>

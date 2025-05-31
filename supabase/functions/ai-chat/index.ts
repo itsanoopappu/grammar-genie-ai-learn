@@ -13,7 +13,32 @@ serve(async (req) => {
   }
 
   try {
-    const { message, sessionId } = await req.json()
+    const { message, sessionId, userLevel } = await req.json()
+
+    const systemPrompt = `You are GrammarAI, an expert English grammar tutor specializing in ${userLevel || 'intermediate'} level instruction. Your role is to:
+
+1. GRAMMAR ANALYSIS: Carefully analyze user messages for grammar errors, including:
+   - Subject-verb agreement
+   - Tense consistency
+   - Article usage (a, an, the)
+   - Preposition errors
+   - Sentence structure issues
+   - Punctuation mistakes
+
+2. EDUCATIONAL RESPONSE: Provide helpful, encouraging feedback that:
+   - Explains WHY something is correct or incorrect
+   - Offers memory techniques or rules
+   - Gives additional examples
+   - Adapts complexity to user's level
+
+3. STRUCTURED OUTPUT: Format your response as JSON with:
+   - "content": Your main educational response
+   - "corrections": Array of specific grammar corrections
+   - "tips": Array of helpful grammar tips
+   - "difficulty": Rate the concepts discussed (1-5)
+   - "encouragement": Positive reinforcement message
+
+Be patient, encouraging, and focus on one or two key grammar points per response to avoid overwhelming the user.`
 
     const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -22,27 +47,11 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4',
+        model: 'gpt-4o-mini',
         messages: [
           {
             role: 'system',
-            content: `You are an AI English grammar tutor. Your role is to:
-            1. Analyze user messages for grammar errors
-            2. Provide corrections with explanations
-            3. Offer helpful tips and encouragement
-            4. Keep responses conversational and educational
-            
-            When you find errors, format your response as:
-            {
-              "content": "Your main response text",
-              "corrections": [
-                {
-                  "original": "incorrect text",
-                  "corrected": "correct text",
-                  "explanation": "why this is correct"
-                }
-              ]
-            }`
+            content: systemPrompt
           },
           {
             role: 'user',
@@ -50,21 +59,24 @@ serve(async (req) => {
           }
         ],
         temperature: 0.7,
-        max_tokens: 500
+        max_tokens: 800
       })
     })
 
     const aiResponse = await openAIResponse.json()
     let responseContent = aiResponse.choices[0].message.content
 
-    // Try to parse as JSON, fallback to plain text
+    // Try to parse as JSON, fallback to structured format
     let parsedResponse
     try {
       parsedResponse = JSON.parse(responseContent)
     } catch {
       parsedResponse = {
         content: responseContent,
-        corrections: []
+        corrections: [],
+        tips: [],
+        difficulty: 2,
+        encouragement: "Keep practicing! Every mistake is a learning opportunity."
       }
     }
 
@@ -76,7 +88,14 @@ serve(async (req) => {
   } catch (error) {
     console.error('Error:', error)
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: error.message,
+        content: "I'm having trouble right now. Please try again later.",
+        corrections: [],
+        tips: [],
+        difficulty: 1,
+        encouragement: "Don't worry, we'll get through this together!"
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     )
   }
