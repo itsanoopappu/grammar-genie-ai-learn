@@ -6,7 +6,6 @@ import PlacementTest from '@/components/PlacementTest';
 import GrammarPractice from '@/components/GrammarPractice';
 import AuthPage from '@/components/AuthPage';
 import { Header } from '@/components/Header';
-import { GrammarTopics } from '@/components/GrammarTopics';
 import TopicRecommendations from '@/components/TopicRecommendations';
 import MyProgress from '@/components/MyProgress';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
@@ -27,7 +26,7 @@ const AppContent = () => {
   }
 
   if (!user) {
-    return <AuthPage onAuthSuccess={() => {}} />;
+    return <AuthPage onAuthSuccess={() => window.location.reload()} />;
   }
 
   return (

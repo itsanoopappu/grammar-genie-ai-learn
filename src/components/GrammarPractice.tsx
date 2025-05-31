@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { BookOpen, ChevronRight, Target, Brain, Star } from 'lucide-react';
+import { BookOpen, ChevronRight, Target, Loader2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import IntelligentPractice from './IntelligentPractice';
 
 interface GrammarTopic {
@@ -13,88 +14,50 @@ interface GrammarTopic {
   description: string;
   level: 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
   category: string;
-  subtopics?: string[];
-  examples?: string[];
+  difficulty_score: number;
+  prerequisites: string[];
+  learning_objectives: string[];
+  common_errors: string[];
 }
 
-const grammarStructure = {
-  beginner: {
-    title: '🌱 Beginner Level (A1–A2 CEFR)',
-    description: 'Build basic sentence structures and foundational grammar.',
-    sections: [
-      {
-        title: '1. Parts of Speech Introduction',
-        topics: [
-          { id: 'nouns', name: 'Nouns', description: 'Singular/plural, countable/uncountable', level: 'A1', category: 'Parts of Speech' },
-          { id: 'pronouns', name: 'Pronouns', description: 'Subject, object, possessive, reflexive', level: 'A1', category: 'Parts of Speech' },
-          { id: 'verbs-basic', name: 'Verbs', description: 'Base form, "to be", simple present', level: 'A1', category: 'Parts of Speech' },
-          { id: 'adjectives', name: 'Adjectives', description: 'Basic description, order of adjectives', level: 'A1', category: 'Parts of Speech' },
-          { id: 'adverbs', name: 'Adverbs', description: 'Time, place, manner', level: 'A1', category: 'Parts of Speech' },
-          { id: 'prepositions', name: 'Prepositions', description: 'In, on, at, under, next to', level: 'A1', category: 'Parts of Speech' },
-          { id: 'articles', name: 'Articles', description: 'A, an, the', level: 'A1', category: 'Parts of Speech' },
-          { id: 'conjunctions', name: 'Conjunctions', description: 'And, but, or', level: 'A1', category: 'Parts of Speech' }
-        ]
-      },
-      {
-        title: '2. Sentence Basics',
-        topics: [
-          { id: 'svo-structure', name: 'Subject-verb-object structure', description: 'Basic sentence patterns', level: 'A1', category: 'Sentence Structure' },
-          { id: 'affirmative-negative', name: 'Affirmative and negative sentences', description: 'Making positive and negative statements', level: 'A1', category: 'Sentence Structure' },
-          { id: 'questions-do-does', name: 'Question formation with "do/does"', description: 'Basic question structures', level: 'A1', category: 'Questions' },
-          { id: 'punctuation', name: 'Capitalization and punctuation', description: 'Basic writing mechanics', level: 'A1', category: 'Writing' }
-        ]
-      },
-      {
-        title: '3. Tenses – Basic',
-        topics: [
-          { id: 'simple-present', name: 'Simple Present', description: 'Regular actions and states', level: 'A1', category: 'Tenses' },
-          { id: 'present-continuous', name: 'Present Continuous', description: 'Actions happening now', level: 'A1', category: 'Tenses' },
-          { id: 'simple-past', name: 'Simple Past', description: 'Completed actions', level: 'A2', category: 'Tenses' },
-          { id: 'past-continuous', name: 'Past Continuous', description: 'Past actions in progress', level: 'A2', category: 'Tenses' }
-        ]
-      }
-    ]
-  },
-  intermediate: {
-    title: '🌿 Intermediate Level (B1–B2 CEFR)',
-    description: 'Improve sentence complexity, variety, and accuracy.',
-    sections: [
-      {
-        title: '1. Tenses – Intermediate',
-        topics: [
-          { id: 'present-perfect', name: 'Present Perfect', description: 'Past actions with present relevance', level: 'B1', category: 'Tenses' },
-          { id: 'present-perfect-continuous', name: 'Present Perfect Continuous', description: 'Ongoing actions until now', level: 'B1', category: 'Tenses' },
-          { id: 'past-perfect', name: 'Past Perfect', description: 'Earlier past actions', level: 'B1', category: 'Tenses' },
-          { id: 'future-forms', name: 'Future Forms', description: 'Will, going to, present continuous', level: 'B1', category: 'Tenses' }
-        ]
-      },
-      {
-        title: '2. Complex Sentences',
-        topics: [
-          { id: 'compound-complex', name: 'Compound & Complex Sentences', description: 'Joining clauses', level: 'B1', category: 'Sentence Structure' },
-          { id: 'subordinating-conjunctions', name: 'Subordinating Conjunctions', description: 'Because, although, since, unless', level: 'B1', category: 'Conjunctions' }
-        ]
-      }
-    ]
-  },
-  advanced: {
-    title: '🌳 Advanced Level (C1–C2 CEFR)',
-    description: 'Polish grammar for fluency, precision, and nuance.',
-    sections: [
-      {
-        title: '1. All Tenses Mastery',
-        topics: [
-          { id: 'advanced-tenses', name: 'Advanced Tenses Usage', description: 'All 12 tenses mastery', level: 'C1', category: 'Tenses' },
-          { id: 'perfect-continuous', name: 'Perfect and Continuous Forms', description: 'Complex time expressions', level: 'C1', category: 'Tenses' },
-          { id: 'future-perfect', name: 'Future Perfect Forms', description: 'Future perfect and continuous', level: 'C1', category: 'Tenses' }
-        ]
-      }
-    ]
-  }
-};
-
 const GrammarPractice = () => {
+  const [topics, setTopics] = useState<GrammarTopic[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedTopic, setSelectedTopic] = useState<GrammarTopic | null>(null);
+
+  useEffect(() => {
+    fetchTopics();
+  }, []);
+
+  const fetchTopics = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('grammar-topics', {
+        body: { action: 'get_topics' }
+      });
+
+      if (error) throw error;
+      setTopics(data.topics);
+    } catch (err) {
+      setError('Failed to load grammar topics');
+      console.error('Error fetching topics:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Group topics by level and category
+  const groupedTopics = topics.reduce((acc, topic) => {
+    const level = topic.level;
+    if (!acc[level]) {
+      acc[level] = {};
+    }
+    if (!acc[level][topic.category]) {
+      acc[level][topic.category] = [];
+    }
+    acc[level][topic.category].push(topic);
+    return acc;
+  }, {} as Record<string, Record<string, GrammarTopic[]>>);
 
   const renderTopicCard = (topic: GrammarTopic) => (
     <Card 
@@ -109,7 +72,7 @@ const GrammarPractice = () => {
             <p className="text-sm text-gray-600">{topic.description}</p>
             <div className="flex items-center space-x-2 mt-2">
               <Badge variant="outline">{topic.level}</Badge>
-              <Badge variant="secondary">{topic.category}</Badge>
+              <Badge variant="secondary">Difficulty: {topic.difficulty_score}/100</Badge>
             </div>
           </div>
           <ChevronRight className="h-5 w-5 text-gray-400" />
@@ -117,6 +80,22 @@ const GrammarPractice = () => {
       </CardContent>
     </Card>
   );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center text-red-500 p-4">
+        {error}
+      </div>
+    );
+  }
 
   if (selectedTopic) {
     return (
@@ -135,28 +114,30 @@ const GrammarPractice = () => {
 
   return (
     <div className="space-y-8">
-      {Object.entries(grammarStructure).map(([level, { title, description, sections }]) => (
+      {Object.entries(groupedTopics).map(([level, categories]) => (
         <Card key={level}>
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
               <BookOpen className="h-5 w-5 text-blue-500" />
-              <span>{title}</span>
+              <span>Level {level}</span>
             </CardTitle>
-            <CardDescription>{description}</CardDescription>
+            <CardDescription>
+              {level.startsWith('A') ? 'Basic/Elementary Level' :
+               level.startsWith('B') ? 'Intermediate Level' :
+               'Advanced Level'}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <ScrollArea className="h-full">
-              <div className="space-y-6">
-                {sections.map((section, index) => (
-                  <div key={index}>
-                    <h3 className="text-lg font-semibold mb-4">{section.title}</h3>
-                    <div className="grid gap-4">
-                      {section.topics.map((topic) => renderTopicCard(topic))}
-                    </div>
-                    {index < sections.length - 1 && <Separator className="my-6" />}
+              {Object.entries(categories).map(([category, topicList]) => (
+                <div key={category} className="mb-6 last:mb-0">
+                  <h3 className="text-lg font-semibold text-blue-700 mb-3">{category}</h3>
+                  <div className="grid gap-4">
+                    {topicList.map(topic => renderTopicCard(topic))}
                   </div>
-                ))}
-              </div>
+                  <Separator className="my-6" />
+                </div>
+              ))}
             </ScrollArea>
           </CardContent>
         </Card>
