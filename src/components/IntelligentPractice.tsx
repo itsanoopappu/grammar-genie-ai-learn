@@ -93,9 +93,14 @@ const IntelligentPractice: React.FC<IntelligentPracticeProps> = ({ topicId }) =>
   const submitAnswer = async () => {
     if (!exercises[currentExerciseIndex]) return;
 
-    const answer = exercises[currentExerciseIndex].type === 'multiple-choice' 
+    let answer = exercises[currentExerciseIndex].type === 'multiple-choice' 
       ? selectedOption 
       : userAnswer;
+
+    // Ensure answer is a string and handle undefined/null cases
+    if (typeof answer !== 'string') {
+      answer = String(answer || '');
+    }
 
     if (!answer.trim()) return;
 
