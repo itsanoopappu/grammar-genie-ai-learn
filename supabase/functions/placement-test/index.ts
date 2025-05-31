@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import "https://deno.land/x/xhr@0.1.0/mod.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -149,12 +148,15 @@ serve(async (req) => {
     const { action, level = 'A2', user_id, answers, test_id, test_type = 'quick' } = await req.json()
 
     if (action === 'generate') {
-      // Create test entry with valid enum value - using 'assessment' instead of 'placement'
+      // Map test_type to valid enum values: 'quick' -> 'standard', 'comprehensive' -> 'adaptive'
+      const dbTestType = test_type === 'quick' ? 'standard' : 'adaptive'
+      
+      // Create test entry with valid enum value
       const { data: testData, error: testError } = await supabaseClient
         .from('placement_tests')
         .insert({
           user_id,
-          test_type: 'assessment', // Use valid enum value from database
+          test_type: dbTestType,
           started_at: new Date().toISOString()
         })
         .select()
