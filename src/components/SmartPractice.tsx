@@ -5,12 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Target, TrendingUp, BookOpen, Brain, Zap, Award, Clock, CheckCircle, AlertCircle, HelpCircle } from 'lucide-react';
+import { Target, TrendingUp, BookOpen, Brain, CheckCircle, AlertCircle } from 'lucide-react';
 import { useIntelligentTutor } from '@/hooks/useIntelligentTutor';
 import { useUnifiedPractice } from '@/hooks/useUnifiedPractice';
 import { supabase } from '@/integrations/supabase/client';
 import LoadingState from './LoadingState';
-import ErrorDisplay from './ErrorDisplay';
+import { PracticeCard } from '@/components/ui/practice-card';
+import { StatsCard } from '@/components/ui/stats-card';
 
 interface SmartPracticeProps {
   onSelectTopic: (topicId: string) => void;
@@ -61,55 +62,14 @@ const SmartPractice: React.FC<SmartPracticeProps> = ({ onSelectTopic }) => {
 
   const loading = topicsLoading || drillsLoading;
 
-  const getPriorityIcon = (priority: string) => {
-    switch (priority) {
-      case 'high':
-        return <AlertCircle className="h-4 w-4 text-red-500" />;
-      case 'normal':
-        return <Target className="h-4 w-4 text-blue-500" />;
-      case 'low':
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
-      default:
-        return <BookOpen className="h-4 w-4 text-gray-500" />;
-    }
-  };
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high':
-        return 'bg-red-100 text-red-800 border-red-200';
-      case 'normal':
-        return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'low':
-        return 'bg-green-100 text-green-800 border-green-200';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  };
-
-  const getDifficultyColor = (difficulty: string) => {
-    switch (difficulty) {
-      case 'Easy': return 'bg-green-100 text-green-700';
-      case 'Medium': return 'bg-yellow-100 text-yellow-700';
-      case 'Hard': return 'bg-red-100 text-red-700';
-      default: return 'bg-gray-100 text-gray-700';
-    }
-  };
-
   const getMasteryColor = (mastery: string) => {
     switch (mastery) {
-      case 'expert':
-        return 'bg-purple-100 text-purple-800';
-      case 'advanced':
-        return 'bg-green-100 text-green-800';
-      case 'proficient':
-        return 'bg-blue-100 text-blue-800';
-      case 'developing':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'novice':
-        return 'bg-gray-100 text-gray-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
+      case 'expert': return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'advanced': return 'bg-green-100 text-green-800 border-green-200';
+      case 'proficient': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'developing': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'novice': return 'bg-gray-100 text-gray-800 border-gray-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
@@ -122,9 +82,9 @@ const SmartPractice: React.FC<SmartPracticeProps> = ({ onSelectTopic }) => {
     const currentExerciseData = exercises[currentExercise];
     
     return (
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-6xl mx-auto space-y-6">
         <Card className="bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200">
-          <CardHeader>
+          <CardHeader className="p-6">
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center space-x-2">
                 <Brain className="h-5 w-5 text-purple-500" />
@@ -136,7 +96,7 @@ const SmartPractice: React.FC<SmartPracticeProps> = ({ onSelectTopic }) => {
             <Progress value={((currentExercise + 1) / exercises.length) * 100} className="mt-2" />
             <div className="text-sm text-gray-600">Score: {drillScore}/{currentExercise + (showFeedback ? 1 : 0)}</div>
           </CardHeader>
-          <CardContent className="space-y-6">
+          <CardContent className="p-6 pt-0 space-y-6">
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 space-y-4">
               <h3 className="font-semibold text-lg">{currentExerciseData.question}</h3>
 
@@ -183,7 +143,7 @@ const SmartPractice: React.FC<SmartPracticeProps> = ({ onSelectTopic }) => {
                 <p className="text-sm mb-2">{exerciseResult.feedback}</p>
                 <p className="text-xs text-gray-600">{currentExerciseData.explanation}</p>
                 {exerciseResult.xpGained && (
-                  <Badge className="mt-2 bg-yellow-100 text-yellow-700">
+                  <Badge className="mt-2 bg-yellow-100 text-yellow-700 border-yellow-200">
                     +{exerciseResult.xpGained} XP
                   </Badge>
                 )}
@@ -217,7 +177,7 @@ const SmartPractice: React.FC<SmartPracticeProps> = ({ onSelectTopic }) => {
   const completedDrills = drillRecommendations.filter(drill => drill.completed);
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6">
       {/* Show assessment prompt if no assessment completed */}
       {!hasCompletedAssessment && (
         <Card className="bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200">
@@ -244,50 +204,36 @@ const SmartPractice: React.FC<SmartPracticeProps> = ({ onSelectTopic }) => {
       )}
 
       {/* Overview Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
-          <CardContent className="flex items-center p-6">
-            <Brain className="h-8 w-8 text-blue-600 mr-3" />
-            <div>
-              <div className="text-2xl font-bold text-blue-800">{aiDrills.length}</div>
-              <div className="text-sm text-blue-600">AI Recommendations</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-gradient-to-br from-red-50 to-red-100 border-red-200">
-          <CardContent className="flex items-center p-6">
-            <Target className="h-8 w-8 text-red-600 mr-3" />
-            <div>
-              <div className="text-2xl font-bold text-red-800">{highPriorityTopics.length}</div>
-              <div className="text-sm text-red-600">Priority Topics</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
-          <CardContent className="flex items-center p-6">
-            <CheckCircle className="h-8 w-8 text-green-600 mr-3" />
-            <div>
-              <div className="text-2xl font-bold text-green-800">{completedDrills.length}</div>
-              <div className="text-sm text-green-600">Completed</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
-          <CardContent className="flex items-center p-6">
-            <TrendingUp className="h-8 w-8 text-purple-600 mr-3" />
-            <div>
-              <div className="text-2xl font-bold text-purple-800">
-                {completedDrills.length > 0 ? Math.round(completedDrills.reduce((acc, drill) => acc + (drill.score || 0), 0) / completedDrills.length) : 0}%
-              </div>
-              <div className="text-sm text-purple-600">Avg. Score</div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatsCard
+          title="AI Recommendations"
+          value={aiDrills.length}
+          icon={Brain}
+          variant="blue"
+        />
+        <StatsCard
+          title="Priority Topics"
+          value={highPriorityTopics.length}
+          icon={Target}
+          variant="red"
+        />
+        <StatsCard
+          title="Completed"
+          value={completedDrills.length}
+          icon={CheckCircle}
+          variant="green"
+        />
+        <StatsCard
+          title="Avg. Score"
+          value={completedDrills.length > 0 ? `${Math.round(completedDrills.reduce((acc, drill) => acc + (drill.score || 0), 0) / completedDrills.length)}%` : '0%'}
+          icon={TrendingUp}
+          variant="purple"
+        />
       </div>
 
       {/* Main Content */}
       <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="w-full">
-        <TabsList className="w-full bg-white/80 backdrop-blur-sm">
+        <TabsList className="w-full bg-white/80 backdrop-blur-sm border">
           <TabsTrigger value="personalized" className="flex items-center space-x-2 flex-1">
             <Brain className="h-4 w-4" />
             <span>AI Practice Drills</span>
@@ -297,14 +243,14 @@ const SmartPractice: React.FC<SmartPracticeProps> = ({ onSelectTopic }) => {
             <span>Topic Recommendations</span>
           </TabsTrigger>
           <TabsTrigger value="completed" className="flex items-center space-x-2 flex-1">
-            <Award className="h-4 w-4" />
+            <CheckCircle className="h-4 w-4" />
             <span>Completed Practice</span>
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="personalized" className="mt-6">
           <Card>
-            <CardHeader>
+            <CardHeader className="p-6">
               <CardTitle className="flex items-center space-x-2">
                 <Brain className="h-5 w-5 text-purple-600" />
                 <span>AI-Powered Practice Drills</span>
@@ -313,41 +259,23 @@ const SmartPractice: React.FC<SmartPracticeProps> = ({ onSelectTopic }) => {
                 Personalized drills based on your assessment results and learning patterns
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-6 pt-0">
               {aiDrills.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {aiDrills.map((drill) => (
-                    <Card key={drill.id} className="border-purple-200 bg-gradient-to-br from-purple-50 to-white hover:shadow-lg transition-shadow">
-                      <CardHeader className="pb-3">
-                        <div className="flex items-center justify-between">
-                          <Badge variant="secondary" className="bg-purple-100 text-purple-700">{drill.level}</Badge>
-                          <div className="flex items-center space-x-1">
-                            <Zap className="h-4 w-4 text-purple-500" />
-                            <Badge className={getDifficultyColor(drill.difficulty)}>
-                              {drill.difficulty}
-                            </Badge>
-                          </div>
-                        </div>
-                        <CardTitle className="text-lg">{drill.topic}</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        <p className="text-sm text-gray-600">{drill.description}</p>
-                        {drill.reason && (
-                          <p className="text-xs text-purple-600 italic bg-purple-50 p-2 rounded">{drill.reason}</p>
-                        )}
-                        <div className="flex items-center text-sm text-gray-500">
-                          <Clock className="h-4 w-4 mr-1" />
-                          {drill.estimatedTime} minutes
-                        </div>
-                        <Button 
-                          className="w-full bg-purple-600 hover:bg-purple-700" 
-                          onClick={() => startDrill(drill)}
-                          disabled={loading}
-                        >
-                          Start AI Practice
-                        </Button>
-                      </CardContent>
-                    </Card>
+                    <PracticeCard
+                      key={drill.id}
+                      title={drill.topic}
+                      description={drill.description}
+                      level={drill.level}
+                      difficulty={drill.difficulty}
+                      estimatedTime={drill.estimatedTime}
+                      priority={drill.priority}
+                      reason={drill.reason}
+                      onAction={() => startDrill(drill)}
+                      actionLabel="Start AI Practice"
+                      variant="ai"
+                    />
                   ))}
                 </div>
               ) : (
@@ -383,7 +311,7 @@ const SmartPractice: React.FC<SmartPracticeProps> = ({ onSelectTopic }) => {
 
         <TabsContent value="topics" className="mt-6">
           <Card>
-            <CardHeader>
+            <CardHeader className="p-6">
               <CardTitle className="flex items-center space-x-2">
                 <Target className="h-5 w-5 text-blue-600" />
                 <span>Topic-Based Recommendations</span>
@@ -392,7 +320,7 @@ const SmartPractice: React.FC<SmartPracticeProps> = ({ onSelectTopic }) => {
                 Grammar topics prioritized based on your current level and learning objectives
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-6 pt-0">
               {topicRecommendations.length > 0 ? (
                 <div className="space-y-4">
                   {topicRecommendations.slice(0, 8).map((topic) => (
@@ -406,9 +334,12 @@ const SmartPractice: React.FC<SmartPracticeProps> = ({ onSelectTopic }) => {
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
                             <div className="flex items-center space-x-2 mb-2">
-                              {getPriorityIcon(topic.priority)}
+                              {topic.priority === 'high' && <AlertCircle className="h-4 w-4 text-red-500" />}
                               <h3 className="font-semibold text-lg">{topic.name}</h3>
-                              <Badge variant="outline" className={getPriorityColor(topic.priority)}>
+                              <Badge 
+                                variant="outline" 
+                                className={topic.priority === 'high' ? 'bg-red-100 text-red-800 border-red-200' : 'bg-blue-100 text-blue-800 border-blue-200'}
+                              >
                                 {topic.priority} priority
                               </Badge>
                             </div>
@@ -474,49 +405,36 @@ const SmartPractice: React.FC<SmartPracticeProps> = ({ onSelectTopic }) => {
 
         <TabsContent value="completed" className="mt-6">
           <Card>
-            <CardHeader>
+            <CardHeader className="p-6">
               <CardTitle className="flex items-center space-x-2">
-                <Award className="h-5 w-5 text-green-600" />
+                <CheckCircle className="h-5 w-5 text-green-600" />
                 <span>Completed Practice Sessions</span>
               </CardTitle>
               <CardDescription>
                 Review your achievements and retake sessions for better scores
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-6 pt-0">
               {completedDrills.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {completedDrills.map((drill) => (
-                    <Card key={drill.id} className="border-green-200 bg-gradient-to-br from-green-50 to-white">
-                      <CardHeader className="pb-3">
-                        <div className="flex items-center justify-between">
-                          <Badge variant="secondary">{drill.level}</Badge>
-                          <Badge variant="secondary" className="bg-green-100 text-green-700">
-                            {drill.score}%
-                          </Badge>
-                        </div>
-                        <CardTitle className="text-lg">{drill.topic}</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        <p className="text-sm text-gray-600">{drill.description}</p>
-                        <div className="flex items-center text-sm text-gray-500">
-                          <Clock className="h-4 w-4 mr-1" />
-                          {drill.estimatedTime} minutes
-                        </div>
-                        <Button 
-                          variant="outline" 
-                          className="w-full hover:bg-green-50"
-                          onClick={() => startDrill(drill)}
-                        >
-                          Practice Again
-                        </Button>
-                      </CardContent>
-                    </Card>
+                    <PracticeCard
+                      key={drill.id}
+                      title={drill.topic}
+                      description={drill.description}
+                      level={drill.level}
+                      estimatedTime={drill.estimatedTime}
+                      completed={true}
+                      score={drill.score}
+                      onAction={() => startDrill(drill)}
+                      actionLabel="Practice Again"
+                      variant="completed"
+                    />
                   ))}
                 </div>
               ) : (
                 <div className="text-center py-12">
-                  <Award className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                  <CheckCircle className="h-16 w-16 mx-auto mb-4 text-gray-300" />
                   <h3 className="text-lg font-semibold text-gray-600 mb-2">No Completed Sessions Yet</h3>
                   <p className="text-gray-500 mb-6">Start practicing to see your completed sessions here!</p>
                   <Button onClick={() => setActiveSubTab('personalized')}>
