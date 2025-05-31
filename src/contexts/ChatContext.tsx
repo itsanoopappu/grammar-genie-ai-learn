@@ -121,7 +121,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     // Update progress if provided
-    if (response.progressUpdate && response.progressUpdate.isCorrect !== null) {
+    if (response.progressUpdate && response.progressUpdate.isCorrect !== undefined) {
       setUserProgress(prev => ({
         ...prev,
         correctAnswers: prev.correctAnswers + (response.progressUpdate.isCorrect ? 1 : 0),
