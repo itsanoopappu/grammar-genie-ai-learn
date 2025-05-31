@@ -66,7 +66,21 @@ serve(async (req) => {
                     "options": ["array", "of", "options"] (for multiple-choice only),
                     "answer": "correct answer",
                     "explanation": "clear explanation",
-                    "difficulty": number 1-5
+                    "difficulty": number 1-5,
+                    "grammarConcept": {
+                      "name": "name of the grammar concept being tested",
+                      "explanation": "detailed explanation of the grammar concept",
+                      "examples": ["example1", "example2"],
+                      "tips": ["tip1", "tip2"],
+                      "commonMistakes": ["mistake1", "mistake2"],
+                      "resources": [
+                        {
+                          "title": "resource title",
+                          "type": "video/article/exercise",
+                          "description": "brief description"
+                        }
+                      ]
+                    }
                   }
                 ]
               }`
@@ -105,12 +119,46 @@ serve(async (req) => {
       const baseXP = 10
       const xpGained = isCorrect ? baseXP : Math.round(baseXP * 0.3)
 
+      // Get grammar concept explanation if user got it wrong
+      let conceptExplanation = null
+      if (!isCorrect) {
+        const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'gpt-4',
+            messages: [
+              {
+                role: 'system',
+                content: 'You are an expert English grammar tutor helping students understand their mistakes.'
+              },
+              {
+                role: 'user',
+                content: `The student answered "${userAnswer}" for a question where "${correctAnswer}" was correct.
+                Provide a detailed explanation of the grammar concept and why the correct answer is right.
+                Include examples and common mistakes to avoid.`
+              }
+            ],
+            temperature: 0.7
+          })
+        })
+
+        if (openAIResponse.ok) {
+          const aiData = await openAIResponse.json()
+          conceptExplanation = aiData.choices[0].message.content
+        }
+      }
+
       return new Response(
         JSON.stringify({
           isCorrect,
           xpGained,
           feedback: isCorrect ? getPositiveFeedback() : getConstructiveFeedback(),
-          nextRecommendation: getNextRecommendation(isCorrect, topic, level)
+          nextRecommendation: getNextRecommendation(isCorrect, topic, level),
+          conceptExplanation
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
@@ -121,6 +169,49 @@ serve(async (req) => {
       
       return new Response(
         JSON.stringify({ recommendations }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (action === 'get-concept-explanation') {
+      const { concept } = await req.json()
+      
+      const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4',
+          messages: [
+            {
+              role: 'system',
+              content: 'You are an expert English grammar tutor providing detailed explanations of grammar concepts.'
+            },
+            {
+              role: 'user',
+              content: `Explain the grammar concept "${concept}" in detail. Include:
+              1. Basic definition and usage
+              2. Examples of correct usage
+              3. Common mistakes to avoid
+              4. Tips for remembering the rules
+              5. Practice suggestions`
+            }
+          ],
+          temperature: 0.7
+        })
+      })
+
+      if (!openAIResponse.ok) {
+        throw new Error(`OpenAI API error: ${openAIResponse.statusText}`)
+      }
+
+      const aiData = await openAIResponse.json()
+      const explanation = aiData.choices[0].message.content
+
+      return new Response(
+        JSON.stringify({ explanation }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
