@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -133,9 +132,10 @@ const IntelligentPractice: React.FC<IntelligentPracticeProps> = ({ topicId }) =>
       return;
     }
 
-    // Defensive check for correctAnswer
-    if (!currentExercise.content?.correctAnswer) {
-      console.error('Current exercise missing correctAnswer:', currentExercise);
+    // Enhanced defensive check for correctAnswer
+    const correctAnswer = currentExercise.content?.correctAnswer;
+    if (!correctAnswer || typeof correctAnswer !== 'string' || correctAnswer.trim() === '') {
+      console.error('Current exercise missing or invalid correctAnswer:', currentExercise);
       setError('This exercise has invalid data. Please try the next exercise.');
       return;
     }
@@ -159,10 +159,9 @@ const IntelligentPractice: React.FC<IntelligentPracticeProps> = ({ topicId }) =>
 
     try {
       console.log('Submitting answer:', answer);
-      console.log('Correct answer:', currentExercise.content.correctAnswer);
+      console.log('Correct answer:', correctAnswer);
 
-      // Safe comparison with proper null checking
-      const correctAnswer = currentExercise.content.correctAnswer;
+      // Safe comparison with proper null checking and defensive programming
       const isCorrect = answer.toLowerCase().trim() === correctAnswer.toLowerCase().trim();
 
       // Save attempt
@@ -204,14 +203,24 @@ const IntelligentPractice: React.FC<IntelligentPracticeProps> = ({ topicId }) =>
 
       setShowFeedback(true);
 
-      // Update session progress
-      await supabase
-        .from('practice_sessions')
-        .update({
-          exercises_attempted: supabase.sql`exercises_attempted + 1`,
-          exercises_correct: isCorrect ? supabase.sql`exercises_correct + 1` : supabase.sql`exercises_correct`
-        })
-        .eq('id', sessionId);
+      // Update session progress - get current values first, then update
+      if (sessionId) {
+        const { data: currentSession } = await supabase
+          .from('practice_sessions')
+          .select('exercises_attempted, exercises_correct')
+          .eq('id', sessionId)
+          .single();
+
+        if (currentSession) {
+          await supabase
+            .from('practice_sessions')
+            .update({
+              exercises_attempted: (currentSession.exercises_attempted || 0) + 1,
+              exercises_correct: (currentSession.exercises_correct || 0) + (isCorrect ? 1 : 0)
+            })
+            .eq('id', sessionId);
+        }
+      }
 
     } catch (err) {
       console.error('Error submitting answer:', err);
