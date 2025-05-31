@@ -8,8 +8,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Target, TrendingUp, BookOpen, Brain, Zap, Award, Clock, CheckCircle, AlertCircle } from 'lucide-react';
 import { useIntelligentTutor } from '@/hooks/useIntelligentTutor';
 import { useSmartPractice } from '@/hooks/useSmartPractice';
-import { LoadingState } from './LoadingState';
-import { ErrorDisplay } from './ErrorDisplay';
+import LoadingState from './LoadingState';
+import ErrorDisplay from './ErrorDisplay';
 
 interface SmartPracticeProps {
   onSelectTopic: (topicId: string) => void;

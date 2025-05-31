@@ -8,7 +8,7 @@ import { TrendingUp, Target, CheckCircle, Clock, Award, Brain } from 'lucide-rea
 import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
 import { supabase } from '@/integrations/supabase/client';
-import { LoadingState } from './LoadingState';
+import LoadingState from './LoadingState';
 
 interface UserSkill {
   id: string;
@@ -111,7 +111,19 @@ const MyProgress = () => {
 
       setUserSkills(skillsData || []);
       setPracticeSessions(sessionsData || []);
-      setAssessmentResults(assessmentsData || []);
+      
+      // Transform assessment results to match our interface
+      const transformedAssessments: AssessmentResult[] = (assessmentsData || []).map((assessment: any) => ({
+        id: assessment.id,
+        assessment_type: assessment.assessment_type,
+        overall_score: assessment.overall_score,
+        recommended_level: assessment.recommended_level,
+        created_at: assessment.created_at,
+        strengths: Array.isArray(assessment.strengths) ? assessment.strengths : [],
+        weaknesses: Array.isArray(assessment.weaknesses) ? assessment.weaknesses : []
+      }));
+      
+      setAssessmentResults(transformedAssessments);
     } catch (error) {
       console.error('Error loading progress data:', error);
     } finally {
