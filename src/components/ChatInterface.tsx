@@ -10,54 +10,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
 
-// Type declarations for Speech Recognition
-declare global {
-  interface Window {
-    SpeechRecognition: typeof SpeechRecognition;
-    webkitSpeechRecognition: typeof SpeechRecognition;
-  }
-}
-
-interface SpeechRecognition extends EventTarget {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  start(): void;
-  stop(): void;
-  abort(): void;
-  onresult: ((event: SpeechRecognitionEvent) => void) | null;
-  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
-  onend: (() => void) | null;
-}
-
-interface SpeechRecognitionEvent extends Event {
-  results: SpeechRecognitionResultList;
-  resultIndex: number;
-}
-
-interface SpeechRecognitionErrorEvent extends Event {
-  error: string;
-  message: string;
-}
-
-interface SpeechRecognitionResultList {
-  readonly length: number;
-  item(index: number): SpeechRecognitionResult;
-  [index: number]: SpeechRecognitionResult;
-}
-
-interface SpeechRecognitionResult {
-  readonly length: number;
-  readonly isFinal: boolean;
-  item(index: number): SpeechRecognitionAlternative;
-  [index: number]: SpeechRecognitionAlternative;
-}
-
-interface SpeechRecognitionAlternative {
-  readonly transcript: string;
-  readonly confidence: number;
-}
-
 interface Message {
   id: string;
   content: string;
@@ -80,27 +32,28 @@ const ChatInterface = () => {
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const [recognition, setRecognition] = useState<SpeechRecognition | null>(null);
+  const [recognition, setRecognition] = useState<any>(null);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     // Initialize speech recognition
     if (typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
-      const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       const recognitionInstance = new SpeechRecognitionAPI();
       
       recognitionInstance.continuous = false;
       recognitionInstance.interimResults = false;
       recognitionInstance.lang = 'en-US';
 
-      recognitionInstance.onresult = (event: SpeechRecognitionEvent) => {
+      recognitionInstance.onresult = (event: any) => {
         const transcript = event.results[0][0].transcript;
         setInputMessage(transcript);
         setIsListening(false);
       };
 
-      recognitionInstance.onerror = (event: SpeechRecognitionErrorEvent) => {
+      recognitionInstance.onerror = (event: any) => {
         console.error('Speech recognition error:', event.error);
         setIsListening(false);
       };
@@ -112,10 +65,8 @@ const ChatInterface = () => {
       setRecognition(recognitionInstance);
     }
 
-    // Load chat history
-    loadChatHistory();
-    
-    // Scroll to bottom when messages change
+    // Initialize chat session
+    initializeChatSession();
     scrollToBottom();
   }, []);
 
@@ -127,40 +78,76 @@ const ChatInterface = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const loadChatHistory = async () => {
+  const initializeChatSession = async () => {
     if (!user) return;
 
     try {
-      const { data, error } = await supabase
+      // Create a new chat session
+      const { data: session, error: sessionError } = await supabase
         .from('chat_sessions')
-        .select('messages')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
+        .insert({
+          user_id: user.id,
+          started_at: new Date().toISOString()
+        })
+        .select()
         .single();
 
-      if (data?.messages) {
-        setMessages(data.messages.map((msg: any) => ({
-          ...msg,
-          timestamp: new Date(msg.timestamp)
-        })));
+      if (sessionError) throw sessionError;
+
+      setCurrentSessionId(session.id);
+      
+      // Load recent messages for this session
+      await loadChatHistory(session.id);
+    } catch (error) {
+      console.error('Error initializing chat session:', error);
+    }
+  };
+
+  const loadChatHistory = async (sessionId: string) => {
+    if (!sessionId) return;
+
+    try {
+      const { data: chatMessages, error } = await supabase
+        .from('chat_messages')
+        .select('*')
+        .eq('session_id', sessionId)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      if (chatMessages && chatMessages.length > 0) {
+        const formattedMessages: Message[] = chatMessages.map((msg: any) => ({
+          id: msg.id,
+          content: msg.message,
+          sender: msg.sender as 'user' | 'ai',
+          timestamp: new Date(msg.created_at),
+          corrections: msg.corrections || [],
+          suggestions: msg.metadata?.suggestions || [],
+          grammarScore: msg.metadata?.grammarScore
+        }));
+        setMessages(formattedMessages);
       }
     } catch (error) {
       console.error('Error loading chat history:', error);
     }
   };
 
-  const saveChatHistory = async (updatedMessages: Message[]) => {
-    if (!user) return;
+  const saveChatMessage = async (message: Message) => {
+    if (!currentSessionId) return;
 
     try {
-      await supabase.from('chat_sessions').upsert({
-        user_id: user.id,
-        messages: updatedMessages,
-        updated_at: new Date().toISOString()
+      await supabase.from('chat_messages').insert({
+        session_id: currentSessionId,
+        message: message.content,
+        sender: message.sender,
+        corrections: message.corrections || null,
+        metadata: {
+          suggestions: message.suggestions || [],
+          grammarScore: message.grammarScore || null
+        }
       });
     } catch (error) {
-      console.error('Error saving chat history:', error);
+      console.error('Error saving chat message:', error);
     }
   };
 
@@ -188,7 +175,7 @@ const ChatInterface = () => {
   };
 
   const sendMessage = async () => {
-    if (!inputMessage.trim() || isLoading) return;
+    if (!inputMessage.trim() || isLoading || !currentSessionId) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -201,6 +188,9 @@ const ChatInterface = () => {
     setMessages(updatedMessages);
     setInputMessage('');
     setIsLoading(true);
+
+    // Save user message
+    await saveChatMessage(userMessage);
 
     try {
       const { data, error } = await supabase.functions.invoke('ai-chat', {
@@ -230,7 +220,9 @@ const ChatInterface = () => {
 
       const finalMessages = [...updatedMessages, aiMessage];
       setMessages(finalMessages);
-      await saveChatHistory(finalMessages);
+
+      // Save AI message
+      await saveChatMessage(aiMessage);
 
       // Update user XP if corrections were made
       if (data.corrections?.length > 0 && profile) {
