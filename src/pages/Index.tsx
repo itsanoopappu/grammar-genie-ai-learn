@@ -15,20 +15,25 @@ const PlacementTest = lazy(() => import('@/components/PlacementTest'));
 const DrillRecommendations = lazy(() => import('@/components/DrillRecommendations'));
 const GrammarTopics = lazy(() => import('@/components/GrammarTopics'));
 
-const ErrorFallback = ({ error, resetErrorBoundary }) => (
-  <div className="min-h-screen flex items-center justify-center bg-red-50">
-    <div className="text-center p-8 rounded-lg bg-white shadow-lg">
-      <h2 className="text-2xl font-bold text-red-600 mb-4">Something went wrong</h2>
-      <p className="text-gray-600 mb-4">{error.message}</p>
-      <button
-        onClick={resetErrorBoundary}
-        className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-      >
-        Try again
-      </button>
+const ErrorFallback = ({ error, resetErrorBoundary }) => {
+  // Safely convert error message to string and provide a fallback
+  const errorMessage = error?.message ? String(error.message) : 'An unexpected error occurred';
+  
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-red-50">
+      <div className="text-center p-8 rounded-lg bg-white shadow-lg">
+        <h2 className="text-2xl font-bold text-red-600 mb-4">Something went wrong</h2>
+        <p className="text-gray-600 mb-4">{errorMessage}</p>
+        <button
+          onClick={resetErrorBoundary}
+          className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+        >
+          Try again
+        </button>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 const AppContent = () => {
   const { user, loading: authLoading } = useAuth();
