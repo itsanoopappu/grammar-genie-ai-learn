@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -67,6 +66,8 @@ const AuthPage = ({ onAuthSuccess }: AuthPageProps) => {
       });
 
       if (error) throw error;
+      
+      // Instead of reloading the page, call the success callback
       onAuthSuccess();
     } catch (error: any) {
       setError(error.message);
