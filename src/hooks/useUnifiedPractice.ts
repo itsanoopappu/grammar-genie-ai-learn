@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
@@ -183,7 +182,7 @@ export const useUnifiedPractice = () => {
         .eq('level', drill.level)
         .eq('user_id', user?.id)
         .eq('resolved', false)
-        .single();
+        .maybeSingle(); // Changed from .single() to .maybeSingle()
 
       if (existingDrill?.drill_data) {
         const exercises = Array.isArray(existingDrill.drill_data) 
