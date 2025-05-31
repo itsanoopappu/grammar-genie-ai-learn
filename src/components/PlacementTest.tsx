@@ -43,16 +43,15 @@ const PlacementTest = () => {
     setLoading(true);
     try {
       // Check if there's an existing test
-      const { data: existingTest, error: existingTestError } = await supabase
+      const { data: existingTests, error: existingTestError } = await supabase
         .from('placement_tests')
         .select('*')
         .eq('user_id', user?.id)
         .order('started_at', { ascending: false })
-        .limit(1)
-        .single();
+        .limit(1);
 
-      if (existingTest) {
-        setTestType(existingTest.test_type);
+      if (existingTests && existingTests.length > 0) {
+        setTestType(existingTests[0].test_type);
       }
 
       const { data, error } = await supabase.functions.invoke('placement-test', {
