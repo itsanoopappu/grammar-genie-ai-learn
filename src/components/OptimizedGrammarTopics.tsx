@@ -1,53 +1,20 @@
 
-import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { BookOpen, ChevronRight, MessageCircle, Target, Loader2 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { BookOpen, ChevronRight, MessageCircle, Target } from 'lucide-react';
+import { useTopics } from '@/hooks/useTopics';
+import LoadingState from './LoadingState';
+import ErrorDisplay from './ErrorDisplay';
 
-interface GrammarTopic {
-  id: string;
-  name: string;
-  description: string;
-  level: string;
-  category: string;
-  difficulty_score: number;
-  prerequisites: string[];
-  learning_objectives: string[];
-  common_errors: string[];
-}
-
-interface GrammarTopicsProps {
+interface OptimizedGrammarTopicsProps {
   onTopicSelect: (topicId: string) => void;
 }
 
-const GrammarTopics: React.FC<GrammarTopicsProps> = ({ onTopicSelect }) => {
-  const [topics, setTopics] = useState<GrammarTopic[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchTopics();
-  }, []);
-
-  const fetchTopics = async () => {
-    try {
-      const { data, error } = await supabase.functions.invoke('grammar-topics', {
-        body: { action: 'get_topics' }
-      });
-
-      if (error) throw error;
-      setTopics(data.topics);
-    } catch (err) {
-      setError('Failed to load grammar topics');
-      console.error('Error fetching topics:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+const OptimizedGrammarTopics: React.FC<OptimizedGrammarTopicsProps> = ({ onTopicSelect }) => {
+  const { data: topics = [], isLoading, error, refetch } = useTopics();
 
   const groupedTopics = topics.reduce((acc, topic) => {
     const level = topic.level;
@@ -59,22 +26,14 @@ const GrammarTopics: React.FC<GrammarTopicsProps> = ({ onTopicSelect }) => {
     }
     acc[level][topic.category].push(topic);
     return acc;
-  }, {} as Record<string, Record<string, GrammarTopic[]>>);
+  }, {} as Record<string, Record<string, any[]>>);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-      </div>
-    );
+  if (isLoading) {
+    return <LoadingState message="Loading grammar topics..." />;
   }
 
   if (error) {
-    return (
-      <div className="text-center text-red-500 p-4">
-        {error}
-      </div>
-    );
+    return <ErrorDisplay error={error.message} onRetry={refetch} />;
   }
 
   return (
@@ -133,10 +92,7 @@ const GrammarTopics: React.FC<GrammarTopicsProps> = ({ onTopicSelect }) => {
                                 variant="ghost"
                                 size="sm"
                                 className="h-8 w-8 p-0"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  // Open chat with context
-                                }}
+                                onClick={(e) => e.stopPropagation()}
                               >
                                 <MessageCircle className="h-4 w-4" />
                                 <span className="sr-only">Discuss</span>
@@ -159,4 +115,4 @@ const GrammarTopics: React.FC<GrammarTopicsProps> = ({ onTopicSelect }) => {
   );
 };
 
-export default GrammarTopics;
+export default OptimizedGrammarTopics;

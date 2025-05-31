@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BookOpen, Target, TrendingUp } from 'lucide-react';
-import GrammarTopics from './GrammarTopics';
+import OptimizedGrammarTopics from './OptimizedGrammarTopics';
 import OptimizedIntelligentPractice from './OptimizedIntelligentPractice';
 import DrillRecommendations from './DrillRecommendations';
 
@@ -47,7 +47,7 @@ const GrammarPractice = () => {
         </TabsList>
 
         <TabsContent value="topics">
-          <GrammarTopics onTopicSelect={handleTopicSelect} />
+          <OptimizedGrammarTopics onTopicSelect={handleTopicSelect} />
         </TabsContent>
 
         <TabsContent value="practice">
