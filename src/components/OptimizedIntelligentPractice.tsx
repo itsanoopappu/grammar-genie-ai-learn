@@ -212,7 +212,7 @@ const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> 
                   Level: {currentLevel}
                 </span>
                 {currentQuestion.level !== currentLevel && (
-                  <AlertCircle className="h-4 w-4 text-red-500" title="Level mismatch detected!" />
+                  <AlertCircle className="h-4 w-4 text-red-500" />
                 )}
               </div>
               <div className="flex items-center space-x-2">
@@ -259,8 +259,7 @@ const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> 
                 correct_answer: currentQuestion.correct_answer,
                 explanation: currentQuestion.explanation
               },
-              level: currentQuestion.level,
-              topic: currentQuestion.topic,
+              difficulty_level: currentQuestion.difficulty_score,
               estimated_time_seconds: 60
             }}
             userAnswer={userAnswer}
