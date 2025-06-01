@@ -3,13 +3,12 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Target, Clock, TrendingUp } from 'lucide-react';
-import { useExercises } from '@/hooks/useExercises';
+import { Target, Clock, TrendingUp, AlertCircle } from 'lucide-react';
 import { usePracticeSession } from '@/hooks/usePracticeSession';
 import { useAIFeedback } from '@/hooks/useAIFeedback';
-import { useAdaptiveScoring } from '@/hooks/useAdaptiveScoring';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useAdaptiveQuestions } from '@/hooks/useAdaptiveQuestions';
+import { useAdaptiveDifficulty } from '@/hooks/useAdaptiveDifficulty';
 import ExerciseDisplay from './ExerciseDisplay';
 import ExerciseFeedback from './ExerciseFeedback';
 import LoadingState from './LoadingState';
@@ -21,7 +20,6 @@ interface OptimizedIntelligentPracticeProps {
 
 const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> = ({ topicId }) => {
   const { user } = useAuth();
-  const { exercises, isLoading, error, refetch } = useExercises(topicId);
   const { 
     createSession, 
     isCreatingSession, 
@@ -30,108 +28,99 @@ const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> 
     currentSession 
   } = usePracticeSession(topicId);
   const { getFeedback, feedback, isLoading: isGettingFeedback } = useAIFeedback();
-  const { getNextDifficultyLevel } = useAdaptiveScoring();
   
-  const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
+  // Adaptive system hooks
+  const { 
+    questions, 
+    isLoading: isLoadingQuestions, 
+    error: questionsError, 
+    loadQuestionsForLevel, 
+    clearQuestions 
+  } = useAdaptiveQuestions();
+  
+  const {
+    currentLevel,
+    consecutiveCorrect,
+    consecutiveWrong,
+    lastAnswerCorrect,
+    progression,
+    processAnswer,
+    calculateNextLevel,
+    updateLevel,
+    reset
+  } = useAdaptiveDifficulty();
+  
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [userAnswer, setUserAnswer] = useState('');
   const [selectedOption, setSelectedOption] = useState('');
   const [showFeedback, setShowFeedback] = useState(false);
-  const [currentDifficultyLevel, setCurrentDifficultyLevel] = useState('B1');
-  const [consecutiveCorrect, setConsecutiveCorrect] = useState(0);
-  const [consecutiveWrong, setConsecutiveWrong] = useState(0);
-  const [lastAnswerCorrect, setLastAnswerCorrect] = useState<boolean | null>(null);
-  const [adaptiveQuestions, setAdaptiveQuestions] = useState<any[]>([]);
   const [questionsAsked, setQuestionsAsked] = useState(0);
   const [maxQuestions] = useState(15);
-  const [isLoadingAdaptive, setIsLoadingAdaptive] = useState(false);
-  const [adaptiveProgression, setAdaptiveProgression] = useState<string[]>(['B1']);
+  const [usedQuestionIds, setUsedQuestionIds] = useState<string[]>([]);
 
-  const currentExercise = adaptiveQuestions[currentExerciseIndex] || exercises[currentExerciseIndex];
+  const currentQuestion = questions[currentQuestionIndex];
 
+  // Initialize session and load first batch of questions
   useEffect(() => {
-    if (exercises.length > 0 && !currentSession) {
+    if (user && !currentSession) {
+      console.log('🎬 Initializing adaptive practice session');
       createSession();
-      loadAdaptiveQuestions('B1', []);
+      reset();
+      loadInitialQuestions();
     }
-  }, [exercises, currentSession, createSession]);
+  }, [user, currentSession, createSession]);
 
-  const loadAdaptiveQuestions = async (level: string, excludeIds: string[] = []) => {
-    if (!user) return;
+  const loadInitialQuestions = async () => {
+    console.log('🚀 Loading initial questions for level B1');
+    await loadQuestionsForLevel('B1', [], 5);
+    setCurrentQuestionIndex(0);
+  };
 
-    setIsLoadingAdaptive(true);
-    console.log(`Loading adaptive questions for level: ${level}, excluding: ${excludeIds.length} questions`);
-    
-    try {
-      const { data: newQuestions, error: questionsError } = await supabase
-        .rpc('get_adaptive_questions_for_user', {
-          p_user_id: user.id,
-          p_current_level: level,
-          p_limit: 5,
-          p_exclude_question_ids: excludeIds
-        });
-
-      if (questionsError) {
-        console.error('Error loading adaptive questions:', questionsError);
-        return;
+  const loadMoreQuestionsIfNeeded = async (level: string) => {
+    // If we're near the end of current questions or level changed, load more
+    if (currentQuestionIndex >= questions.length - 2 || questions.length === 0) {
+      console.log(`📥 Loading more questions for level ${level}`);
+      const newQuestions = await loadQuestionsForLevel(level, usedQuestionIds, 5);
+      
+      if (newQuestions.length === 0) {
+        console.warn(`⚠️ No more questions available for level ${level}`);
+        return false;
       }
-
-      if (newQuestions && newQuestions.length > 0) {
-        const transformedQuestions = newQuestions.map((q: any) => ({
-          id: q.id,
-          type: 'multiple-choice',
-          content: {
-            question: q.question,
-            options: q.options,
-            correct_answer: q.correct_answer,
-            explanation: q.explanation
-          },
-          level: q.level,
-          topic: q.topic,
-          estimated_time_seconds: 60
-        }));
-
-        console.log(`✅ Loaded ${transformedQuestions.length} questions for level ${level}`);
-        setAdaptiveQuestions(prev => [...prev, ...transformedQuestions]);
-      } else {
-        console.warn(`⚠️ No questions found for level ${level}`);
-      }
-    } catch (error) {
-      console.error('Error in loadAdaptiveQuestions:', error);
-    } finally {
-      setIsLoadingAdaptive(false);
+      
+      setCurrentQuestionIndex(0);
+      return true;
     }
+    return true;
   };
 
   const submitAnswer = async () => {
-    if (!currentExercise || !currentSession) return;
+    if (!currentQuestion || !currentSession) return;
 
-    const answer = currentExercise.type === 'multiple-choice' ? selectedOption : userAnswer;
+    const answer = selectedOption || userAnswer;
+    if (!answer.trim()) return;
 
-    if (!answer.trim()) {
-      return;
-    }
-
-    const correctAnswer = currentExercise.content.correct_answer;
+    const correctAnswer = currentQuestion.correct_answer;
     const isCorrect = answer.toLowerCase().trim() === correctAnswer.toLowerCase().trim();
 
-    console.log(`🎯 Answer submitted: ${isCorrect ? 'CORRECT' : 'INCORRECT'} for level ${currentExercise.level || currentDifficultyLevel}`);
-
-    // Update consecutive counters and track last answer
-    setLastAnswerCorrect(isCorrect);
+    console.log(`🎯 Answer submitted: ${isCorrect ? 'CORRECT' : 'INCORRECT'} for level ${currentQuestion.level}`);
+    console.log(`🔍 Question level: ${currentQuestion.level}, Current difficulty: ${currentLevel}`);
     
-    if (isCorrect) {
-      setConsecutiveCorrect(prev => prev + 1);
-      setConsecutiveWrong(0);
-    } else {
-      setConsecutiveWrong(prev => prev + 1);
-      setConsecutiveCorrect(0);
+    // Validate question level matches current difficulty
+    if (currentQuestion.level !== currentLevel) {
+      console.error(`❌ LEVEL MISMATCH! Question level: ${currentQuestion.level}, Expected: ${currentLevel}`);
     }
+
+    // Process the answer for difficulty tracking
+    processAnswer(isCorrect);
+
+    // Add to used questions
+    setUsedQuestionIds(prev => [...prev, currentQuestion.id]);
 
     // Get AI feedback
     getFeedback({
       userAnswer: answer,
       correctAnswer: correctAnswer,
-      topic: currentExercise.content.question
+      topic: currentQuestion.question
     });
 
     // Update progress
@@ -141,7 +130,7 @@ const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> 
     setShowFeedback(true);
   };
 
-  const nextExercise = async () => {
+  const nextQuestion = async () => {
     // Check if we should complete the session
     if (questionsAsked >= maxQuestions || 
         (questionsAsked >= 10 && Math.abs(consecutiveCorrect - consecutiveWrong) >= 4)) {
@@ -149,71 +138,58 @@ const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> 
         await completeSession(currentSession.id);
       }
       // Reset for new session
-      refetch();
-      setCurrentExerciseIndex(0);
-      setAdaptiveQuestions([]);
+      console.log('🏁 Session completed, resetting');
+      reset();
+      clearQuestions();
+      setCurrentQuestionIndex(0);
       setQuestionsAsked(0);
-      setConsecutiveCorrect(0);
-      setConsecutiveWrong(0);
-      setLastAnswerCorrect(null);
-      setCurrentDifficultyLevel('B1');
-      setAdaptiveProgression(['B1']);
+      setUsedQuestionIds([]);
       setUserAnswer('');
       setSelectedOption('');
       setShowFeedback(false);
+      await loadInitialQuestions();
       return;
     }
 
-    // Calculate next difficulty level based on performance
-    const nextLevel = getNextDifficultyLevel(
-      currentDifficultyLevel,
-      lastAnswerCorrect || false,
-      consecutiveCorrect,
-      consecutiveWrong
-    );
+    // Calculate next difficulty level
+    const nextLevel = calculateNextLevel();
+    const levelChanged = updateLevel(nextLevel);
 
-    // Update difficulty level and progression if it changed
-    if (nextLevel !== currentDifficultyLevel) {
-      console.log(`🚀 DIFFICULTY CHANGE: ${currentDifficultyLevel} → ${nextLevel}`);
-      setCurrentDifficultyLevel(nextLevel);
-      setAdaptiveProgression(prev => [...prev, nextLevel]);
-      
-      // Reset consecutive counters when level changes
-      setConsecutiveCorrect(0);
-      setConsecutiveWrong(0);
-      
-      // Load new questions for the new level
-      const usedQuestionIds = adaptiveQuestions.map(q => q.id);
-      await loadAdaptiveQuestions(nextLevel, usedQuestionIds);
+    if (levelChanged) {
+      // Level changed - clear current questions and load new ones
+      console.log(`🔄 Level changed to ${nextLevel}, loading new questions`);
+      clearQuestions();
+      await loadQuestionsForLevel(nextLevel, usedQuestionIds, 5);
+      setCurrentQuestionIndex(0);
+    } else {
+      // Same level - move to next question or load more if needed
+      const canProceed = await loadMoreQuestionsIfNeeded(currentLevel);
+      if (canProceed) {
+        setCurrentQuestionIndex(prev => prev + 1);
+      }
     }
 
-    // Move to next question
-    const nextQuestionIndex = currentExerciseIndex + 1;
-    
-    // Check if we need more questions for current level
-    if (nextQuestionIndex >= adaptiveQuestions.length) {
-      const usedQuestionIds = adaptiveQuestions.map(q => q.id);
-      await loadAdaptiveQuestions(currentDifficultyLevel, usedQuestionIds);
-    }
-
-    setCurrentExerciseIndex(nextQuestionIndex);
     setUserAnswer('');
     setSelectedOption('');
     setShowFeedback(false);
   };
 
-  if (isLoading || isCreatingSession) {
-    return <LoadingState message="Loading adaptive practice..." />;
+  if (isCreatingSession) {
+    return <LoadingState message="Starting adaptive practice..." />;
   }
 
-  if (error) {
-    return <ErrorDisplay error={error.message} onRetry={refetch} />;
+  if (questionsError) {
+    return <ErrorDisplay error={questionsError} onRetry={loadInitialQuestions} />;
   }
 
-  if (!currentExercise) {
+  if (isLoadingQuestions && questions.length === 0) {
+    return <LoadingState message={`Loading questions for level ${currentLevel}...`} />;
+  }
+
+  if (!currentQuestion) {
     return (
       <div className="text-center text-gray-500 p-4">
-        {isLoadingAdaptive ? 'Loading questions...' : 'No exercises available for adaptive practice.'}
+        {isLoadingQuestions ? `Loading questions for level ${currentLevel}...` : 'No questions available for adaptive practice.'}
       </div>
     );
   }
@@ -233,14 +209,15 @@ const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> 
               <div className="flex items-center space-x-2">
                 <TrendingUp className="h-4 w-4 text-purple-500" />
                 <span className="text-sm text-purple-600 font-medium">
-                  Level: {currentExercise.level || currentDifficultyLevel}
+                  Level: {currentLevel}
                 </span>
+                {currentQuestion.level !== currentLevel && (
+                  <AlertCircle className="h-4 w-4 text-red-500" title="Level mismatch detected!" />
+                )}
               </div>
               <div className="flex items-center space-x-2">
                 <Clock className="h-4 w-4 text-gray-500" />
-                <span className="text-sm text-gray-600">
-                  ~{currentExercise.estimated_time_seconds || 60}s
-                </span>
+                <span className="text-sm text-gray-600">~60s</span>
               </div>
             </div>
           </div>
@@ -252,9 +229,10 @@ const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> 
                 <span>Progress: {currentSession.exercises_correct || 0}/{currentSession.exercises_attempted || 0} correct</span>
               )}
               <span>Consecutive: ✓{consecutiveCorrect} ✗{consecutiveWrong}</span>
+              <span>Q Level: {currentQuestion.level} | Target: {currentLevel}</span>
             </div>
             <div className="flex flex-col items-end space-y-1">
-              <span>Progression: {adaptiveProgression.join(' → ')}</span>
+              <span>Progression: {progression.join(' → ')}</span>
               {lastAnswerCorrect !== null && (
                 <span className={lastAnswerCorrect ? 'text-green-600' : 'text-red-600'}>
                   Last: {lastAnswerCorrect ? '✓' : '✗'}
@@ -263,16 +241,28 @@ const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> 
             </div>
           </div>
 
-          {isLoadingAdaptive && (
+          {isLoadingQuestions && (
             <div className="text-sm text-blue-600 mt-2">
-              Loading questions for level {currentDifficultyLevel}...
+              Loading questions for level {currentLevel}...
             </div>
           )}
         </CardHeader>
 
         <CardContent className="space-y-6">
           <ExerciseDisplay
-            exercise={currentExercise}
+            exercise={{
+              id: currentQuestion.id,
+              type: 'multiple-choice',
+              content: {
+                question: currentQuestion.question,
+                options: currentQuestion.options,
+                correct_answer: currentQuestion.correct_answer,
+                explanation: currentQuestion.explanation
+              },
+              level: currentQuestion.level,
+              topic: currentQuestion.topic,
+              estimated_time_seconds: 60
+            }}
             userAnswer={userAnswer}
             selectedOption={selectedOption}
             onAnswerChange={setUserAnswer}
@@ -295,9 +285,9 @@ const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> 
               </Button>
             ) : (
               <Button 
-                onClick={nextExercise}
+                onClick={nextQuestion}
                 className="w-full"
-                disabled={isLoadingAdaptive}
+                disabled={isLoadingQuestions}
               >
                 {questionsAsked >= maxQuestions || (questionsAsked >= 10 && Math.abs(consecutiveCorrect - consecutiveWrong) >= 4) 
                   ? 'Complete Practice' 
