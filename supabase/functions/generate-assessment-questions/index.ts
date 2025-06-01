@@ -45,8 +45,16 @@ serve(async (req) => {
                 detailed_explanation: { type: "string" },
                 first_principles_explanation: { type: "string" },
                 wrong_answer_explanations: {
-                  type: "object",
-                  additionalProperties: { type: "string" }
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      option: { type: "string" },
+                      explanation: { type: "string" }
+                    },
+                    required: ["option", "explanation"],
+                    additionalProperties: false
+                  }
                 },
                 difficulty_score: {
                   type: "integer",
@@ -103,7 +111,7 @@ Each question should have:
 3. Brief explanation for the correct answer
 4. Detailed explanation covering the grammatical rule/principle
 5. First principles explanation connecting to fundamental language concepts
-6. Wrong answer explanations for each incorrect option (as an object with option text as keys)
+6. Wrong answer explanations for each incorrect option (as an array of objects with option and explanation)
 7. Appropriate difficulty score (1-100)
 8. Relevant topic tags
 
@@ -153,25 +161,33 @@ Ensure questions test practical language use, not just theoretical knowledge.`
       
       console.log('Successfully parsed questions:', questionsData.questions.length);
       
+      // Transform wrong_answer_explanations from array to object format for database
+      const transformedQuestions = questionsData.questions.map((q: any) => {
+        const wrongAnswerExplanationsObj: Record<string, string> = {};
+        q.wrong_answer_explanations.forEach((item: any) => {
+          wrongAnswerExplanationsObj[item.option] = item.explanation;
+        });
+        
+        return {
+          question: q.question,
+          options: q.options,
+          correct_answer: q.correct_answer,
+          topic: q.topic,
+          level: q.level,
+          explanation: q.explanation,
+          detailed_explanation: q.detailed_explanation,
+          first_principles_explanation: q.first_principles_explanation,
+          wrong_answer_explanations: wrongAnswerExplanationsObj,
+          difficulty_score: q.difficulty_score,
+          topic_tags: q.topic_tags,
+          question_type: q.question_type
+        };
+      });
+      
       // Insert questions into database
       const { data: insertedQuestions, error: insertError } = await supabaseClient
         .from('test_questions')
-        .insert(
-          questionsData.questions.map((q: any) => ({
-            question: q.question,
-            options: q.options,
-            correct_answer: q.correct_answer,
-            topic: q.topic,
-            level: q.level,
-            explanation: q.explanation,
-            detailed_explanation: q.detailed_explanation,
-            first_principles_explanation: q.first_principles_explanation,
-            wrong_answer_explanations: q.wrong_answer_explanations,
-            difficulty_score: q.difficulty_score,
-            topic_tags: q.topic_tags,
-            question_type: q.question_type
-          }))
-        )
+        .insert(transformedQuestions)
         .select()
 
       if (insertError) {
