@@ -314,6 +314,42 @@ export type Database = {
           },
         ]
       }
+      grammar_topic_combinations: {
+        Row: {
+          cef_level: string
+          created_at: string | null
+          grammar_category: string
+          grammar_topic: string
+          id: string
+          last_used_at: string | null
+          questions_generated: number | null
+          subject_category: string
+          subject_topic: string
+        }
+        Insert: {
+          cef_level: string
+          created_at?: string | null
+          grammar_category: string
+          grammar_topic: string
+          id?: string
+          last_used_at?: string | null
+          questions_generated?: number | null
+          subject_category: string
+          subject_topic: string
+        }
+        Update: {
+          cef_level?: string
+          created_at?: string | null
+          grammar_category?: string
+          grammar_topic?: string
+          id?: string
+          last_used_at?: string | null
+          questions_generated?: number | null
+          subject_category?: string
+          subject_topic?: string
+        }
+        Relationships: []
+      }
       grammar_topics: {
         Row: {
           category: string
@@ -572,12 +608,15 @@ export type Database = {
           difficulty_score: number | null
           explanation: string | null
           first_principles_explanation: string | null
+          grammar_category: string | null
+          grammar_topic: string | null
           id: string
           is_correct: boolean | null
           level: string | null
           options: Json | null
           question: string
           question_type: string | null
+          subject_category: string | null
           test_id: string | null
           topic: string | null
           topic_tags: Json | null
@@ -590,12 +629,15 @@ export type Database = {
           difficulty_score?: number | null
           explanation?: string | null
           first_principles_explanation?: string | null
+          grammar_category?: string | null
+          grammar_topic?: string | null
           id?: string
           is_correct?: boolean | null
           level?: string | null
           options?: Json | null
           question: string
           question_type?: string | null
+          subject_category?: string | null
           test_id?: string | null
           topic?: string | null
           topic_tags?: Json | null
@@ -608,12 +650,15 @@ export type Database = {
           difficulty_score?: number | null
           explanation?: string | null
           first_principles_explanation?: string | null
+          grammar_category?: string | null
+          grammar_topic?: string | null
           id?: string
           is_correct?: boolean | null
           level?: string | null
           options?: Json | null
           question?: string
           question_type?: string | null
+          subject_category?: string | null
           test_id?: string | null
           topic?: string | null
           topic_tags?: Json | null

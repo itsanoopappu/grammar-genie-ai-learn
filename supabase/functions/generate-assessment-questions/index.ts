@@ -42,7 +42,67 @@ const CEF_LEVEL_CRITERIA = {
   }
 };
 
-// Comprehensive Topic Database - 200+ diverse topics
+// Comprehensive Grammar Topics by Category and CEF Level
+const GRAMMAR_TOPICS = {
+  'tenses': {
+    'A1': ['Present Simple', 'Present Continuous', 'Past Simple'],
+    'A2': ['Present Perfect', 'Future with "will"', 'Past Continuous'],
+    'B1': ['Present Perfect Continuous', 'Past Perfect', 'Future Perfect'],
+    'B2': ['Past Perfect Continuous', 'Future Continuous', 'Mixed Conditionals'],
+    'C1': ['Advanced Perfect Aspects', 'Complex Temporal Relations', 'Narrative Tenses'],
+    'C2': ['Subtle Tense Distinctions', 'Literary Tenses', 'Archaic Forms']
+  },
+  'conditionals': {
+    'A1': ['Basic "if" statements'],
+    'A2': ['First Conditional', 'Zero Conditional'],
+    'B1': ['Second Conditional', 'Third Conditional'],
+    'B2': ['Mixed Conditionals', 'Unless/Provided clauses'],
+    'C1': ['Advanced Conditional Forms', 'Implied Conditionals'],
+    'C2': ['Subjunctive Conditionals', 'Archaic Conditional Forms']
+  },
+  'modals': {
+    'A1': ['Can/Cannot', 'Must/Mustn\'t'],
+    'A2': ['Should/Shouldn\'t', 'May/Might'],
+    'B1': ['Could/Would', 'Have to/Don\'t have to'],
+    'B2': ['Modal Perfect Forms', 'Ought to/Used to'],
+    'C1': ['Complex Modal Expressions', 'Modal Deduction'],
+    'C2': ['Subjunctive Modals', 'Archaic Modal Forms']
+  },
+  'articles': {
+    'A1': ['Definite Article "the"', 'Indefinite Articles "a/an"'],
+    'A2': ['Zero Article', 'Articles with Countable/Uncountable'],
+    'B1': ['Articles with Proper Nouns', 'Generic References'],
+    'B2': ['Articles in Fixed Expressions', 'Cultural Article Usage'],
+    'C1': ['Subtle Article Distinctions', 'Stylistic Article Choices'],
+    'C2': ['Archaic Article Usage', 'Literary Article Forms']
+  },
+  'prepositions': {
+    'A1': ['Basic Location Prepositions', 'Time Prepositions'],
+    'A2': ['Movement Prepositions', 'Phrasal Prepositions'],
+    'B1': ['Abstract Prepositions', 'Dependent Prepositions'],
+    'B2': ['Complex Prepositional Phrases', 'Idiomatic Prepositions'],
+    'C1': ['Subtle Prepositional Meanings', 'Register-specific Prepositions'],
+    'C2': ['Archaic Prepositions', 'Literary Prepositional Usage']
+  },
+  'passive_voice': {
+    'A1': ['Basic Passive Present'],
+    'A2': ['Passive Past', 'Passive with "by"'],
+    'B1': ['Passive Perfect Tenses', 'Passive Modals'],
+    'B2': ['Complex Passive Structures', 'Causative Passive'],
+    'C1': ['Advanced Passive Forms', 'Impersonal Passive'],
+    'C2': ['Archaic Passive Forms', 'Literary Passive Usage']
+  },
+  'reported_speech': {
+    'A1': ['Basic Reported Statements'],
+    'A2': ['Reported Questions', 'Time Changes'],
+    'B1': ['Reported Commands', 'Mixed Reporting'],
+    'B2': ['Complex Reported Speech', 'Reporting Verbs'],
+    'C1': ['Subtle Reporting Nuances', 'Literary Reporting'],
+    'C2': ['Archaic Reporting Forms', 'Complex Discourse Reporting']
+  }
+};
+
+// Comprehensive Subject Topics - 200+ diverse topics
 const COMPREHENSIVE_TOPICS = {
   'daily_life': [
     'Morning routines', 'Shopping for groceries', 'Cooking dinner', 'House cleaning', 'Personal hygiene',
@@ -135,11 +195,11 @@ serve(async (req) => {
       const levels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
       const questionsPerLevel = 5;
 
-      console.log(`Starting topic-based question generation with unlimited variety system`);
+      console.log(`Starting grammar-subject-CEF combination generation system`);
 
-      // Phase 1: Get or select unused topic
-      const selectedTopic = await selectUnusedTopic(supabaseClient);
-      console.log(`Selected topic: ${selectedTopic.name} (${selectedTopic.category})`);
+      // Phase 1: Get or select unused grammar-subject-CEF combination
+      const selectedCombination = await selectUnusedGrammarCombination(supabaseClient);
+      console.log(`Selected combination: Grammar: ${selectedCombination.grammar_topic} (${selectedCombination.grammar_category}), Subject: ${selectedCombination.subject_topic} (${selectedCombination.subject_category}), Level: ${selectedCombination.cef_level}`);
 
       const questionsSchema = {
         type: "object",
@@ -159,6 +219,9 @@ serve(async (req) => {
                 correct_answer: { type: "string" },
                 topic: { type: "string" },
                 level: { type: "string" },
+                grammar_topic: { type: "string" },
+                grammar_category: { type: "string" },
+                subject_category: { type: "string" },
                 explanation: { type: "string" },
                 detailed_explanation: { type: "string" },
                 first_principles_explanation: { type: "string" },
@@ -186,9 +249,10 @@ serve(async (req) => {
                 question_type: { type: "string" }
               },
               required: [
-                "question", "options", "correct_answer", "topic", "level",
-                "explanation", "detailed_explanation", "first_principles_explanation",
-                "wrong_answer_explanations", "difficulty_score", "topic_tags", "question_type"
+                "question", "options", "correct_answer", "topic", "level", "grammar_topic",
+                "grammar_category", "subject_category", "explanation", "detailed_explanation", 
+                "first_principles_explanation", "wrong_answer_explanations", "difficulty_score", 
+                "topic_tags", "question_type"
               ],
               additionalProperties: false
             }
@@ -200,143 +264,149 @@ serve(async (req) => {
 
       let allQuestions: any[] = [];
 
-      // Phase 2: Generate questions for each level with topic-based approach
-      for (const currentLevel of levels) {
-        console.log(`Generating topic-based questions for CEF level ${currentLevel} on topic: ${selectedTopic.name}`);
-        
-        const levelCriteria = CEF_LEVEL_CRITERIA[currentLevel as keyof typeof CEF_LEVEL_CRITERIA];
+      // Phase 2: Generate questions for the selected level with grammar-subject combination
+      const currentLevel = selectedCombination.cef_level;
+      console.log(`Generating grammar-focused questions for CEF level ${currentLevel}`);
+      
+      const levelCriteria = CEF_LEVEL_CRITERIA[currentLevel as keyof typeof CEF_LEVEL_CRITERIA];
 
-        // Create comprehensive topic-based prompt
-        const topicBasedSystemPrompt = `You are an expert English language assessment creator specializing in CEF (Common European Framework) levels. 
+      // Create comprehensive grammar-subject-based prompt
+      const grammarSubjectSystemPrompt = `You are an expert English grammar assessment creator specializing in CEF (Common European Framework) levels with deep grammatical expertise.
 
 CRITICAL CEF LEVEL ${currentLevel} SPECIFICATIONS:
 ${levelCriteria.description}
 COMPLEXITY LEVEL: ${levelCriteria.complexity}
 DIFFICULTY SCORE RANGE: ${levelCriteria.difficulty_range[0]}-${levelCriteria.difficulty_range[1]}
 
-TOPIC FOCUS: "${selectedTopic.name}" (Category: ${selectedTopic.category})
+MANDATORY GRAMMAR FOCUS: "${selectedCombination.grammar_topic}" (Category: ${selectedCombination.grammar_category})
+SUBJECT CONTEXT: "${selectedCombination.subject_topic}" (Category: ${selectedCombination.subject_category})
 
-TOPIC-BASED GENERATION REQUIREMENTS:
-1. ALL questions must be grounded in real-world scenarios related to "${selectedTopic.name}"
-2. Create authentic, meaningful contexts that naturally require ${currentLevel}-level English
-3. Ensure questions test language skills within the topic domain
-4. Use vocabulary and situations appropriate for "${selectedTopic.name}"
-5. Make questions feel like genuine communication needs in this topic area
+CRITICAL GRAMMAR-FOCUSED GENERATION REQUIREMENTS:
+1. PRIMARY FOCUS: All questions MUST test the specific grammar point "${selectedCombination.grammar_topic}"
+2. SECONDARY CONTEXT: Use "${selectedCombination.subject_topic}" as the thematic context for the grammar testing
+3. GRAMMAR CENTRALITY: The grammatical aspect must be the core of what's being tested, not the subject knowledge
+4. AUTHENTIC INTEGRATION: Seamlessly integrate grammar testing within realistic "${selectedCombination.subject_topic}" scenarios
+5. LEVEL APPROPRIATENESS: Ensure grammar complexity matches ${currentLevel} level exactly
 
-QUALITY REQUIREMENTS:
-1. Each question must test authentic ${currentLevel}-level competency within the topic context
-2. Distractors must be plausible but clearly incorrect for ${currentLevel} learners
-3. Questions must reflect real-world language use in "${selectedTopic.name}" situations
-4. Avoid academic/artificial language constructions
-5. Ensure cultural neutrality and accessibility
+QUALITY REQUIREMENTS FOR GRAMMAR TESTING:
+1. Each question must have a clear grammatical objective focused on "${selectedCombination.grammar_topic}"
+2. Distractors must represent common grammatical errors related to this grammar point
+3. Context must feel natural and relevant to "${selectedCombination.subject_topic}"
+4. Questions must test functional grammar use, not abstract rules
+5. Ensure cultural neutrality while maintaining subject authenticity
 
-VARIETY REQUIREMENTS:
-1. Use different question types: ${QUESTION_TYPES.slice(0, 4).join(', ')}
-2. Vary sentence length and complexity within ${currentLevel} parameters
-3. Include different sub-contexts within "${selectedTopic.name}"
-4. Test both receptive and productive knowledge
-5. Create 5 completely unique questions about different aspects of "${selectedTopic.name}"
+GRAMMAR-SUBJECT INTEGRATION EXAMPLES:
+- If testing "Present Perfect" with "Travel experiences": Focus on Perfect aspect usage in travel contexts
+- If testing "Conditionals" with "Cooking": Focus on conditional structures in recipe/cooking scenarios
+- If testing "Passive Voice" with "Technology": Focus on passive construction in tech-related contexts
 
 Each question MUST include:
-- Comprehensive explanation (why the answer is correct)
-- Detailed grammatical/linguistic analysis
-- First principles explanation (underlying language rule)
-- Specific explanations for why each wrong answer is incorrect
+- Clear grammar focus on "${selectedCombination.grammar_topic}"
+- Subject context from "${selectedCombination.subject_topic}"
+- Comprehensive grammatical explanation
+- Detailed linguistic analysis of the grammar point
+- First principles explanation of the grammatical rule
+- Specific explanations for why each wrong answer represents a grammatical error
 - Accurate difficulty score within the specified range
-- Topic tags including "${selectedTopic.name}" and related terms`;
+- Topic tags including both grammar and subject elements`;
 
-        const userPrompt = `Generate exactly ${questionsPerLevel} completely original English assessment questions for CEF level ${currentLevel}.
+      const userPrompt = `Generate exactly ${questionsPerLevel} completely original English grammar assessment questions for CEF level ${currentLevel}.
 
 STRICT REQUIREMENTS:
-- ALL questions must be exactly ${currentLevel} level difficulty
-- Every question must be grounded in real "${selectedTopic.name}" scenarios
-- Use realistic, communicative contexts related to "${selectedTopic.name}"
-- Ensure each question tests genuine ${currentLevel} competency within this topic
-- Questions must be completely unique and contextually different
+- ALL questions must focus primarily on testing "${selectedCombination.grammar_topic}" grammar
+- Use "${selectedCombination.subject_topic}" as the contextual setting for grammar testing
+- Questions must be exactly ${currentLevel} level difficulty for the specific grammar point
+- Each question must clearly test understanding of "${selectedCombination.grammar_topic}"
+- Distractors must represent realistic grammar errors for this specific point
+- Context must be authentic to "${selectedCombination.subject_topic}" scenarios
+- Grammar must be the primary testing objective, subject knowledge secondary
 - Difficulty scores must be within ${levelCriteria.difficulty_range[0]}-${levelCriteria.difficulty_range[1]} range
-- Topic must be set to "${selectedTopic.name}" for all questions
 
-CONTEXT EXAMPLES for "${selectedTopic.name}":
-Create questions that could realistically occur when someone is dealing with ${selectedTopic.name} situations.
-Make each question feel like a genuine language need someone might have in this context.`;
+GRAMMAR TESTING FOCUS:
+Create questions where learners must demonstrate understanding of "${selectedCombination.grammar_topic}" 
+within realistic "${selectedCombination.subject_topic}" communication scenarios.
+The grammar point should be naturally integrated but clearly the focus of assessment.`;
 
-        const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
-            'Content-Type': 'application/json',
+      const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          messages: [
+            { role: 'system', content: grammarSubjectSystemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "grammar_subject_assessment_questions",
+              strict: true,
+              schema: questionsSchema
+            }
           },
-          body: JSON.stringify({
-            model: 'gpt-4o',
-            messages: [
-              { role: 'system', content: topicBasedSystemPrompt },
-              { role: 'user', content: userPrompt }
-            ],
-            response_format: {
-              type: "json_schema",
-              json_schema: {
-                name: "topic_based_assessment_questions",
-                strict: true,
-                schema: questionsSchema
-              }
-            },
-            temperature: 0.8 // Higher temperature for more variety within topic
-          })
-        });
+          temperature: 0.7 // Balanced temperature for quality and variety
+        })
+      });
 
-        if (!openAIResponse.ok) {
-          const errorData = await openAIResponse.json();
-          console.error(`OpenAI API error for level ${currentLevel}:`, errorData);
-          throw new Error(`OpenAI API error for level ${currentLevel}: ${openAIResponse.statusText}`);
-        }
-
-        const aiData = await openAIResponse.json();
-        
-        if (aiData.choices[0].message.refusal) {
-          console.error(`OpenAI refused the request for level ${currentLevel}:`, aiData.choices[0].message.refusal);
-          throw new Error(`OpenAI refused the request for level ${currentLevel}`);
-        }
-
-        if (!aiData.choices[0].message.content) {
-          console.error(`No content received from OpenAI for level ${currentLevel}`);
-          throw new Error(`No content received from OpenAI for level ${currentLevel}`);
-        }
-
-        const questionsData = JSON.parse(aiData.choices[0].message.content);
-        
-        // Phase 3: Quality validation
-        const validatedQuestions = [];
-        for (const question of questionsData.questions) {
-          // Validate level consistency
-          if (question.level !== currentLevel) {
-            console.warn(`Question level mismatch: expected ${currentLevel}, got ${question.level}`);
-            question.level = currentLevel;
-          }
-
-          // Validate difficulty score range
-          if (question.difficulty_score < levelCriteria.difficulty_range[0] || 
-              question.difficulty_score > levelCriteria.difficulty_range[1]) {
-            console.warn(`Difficulty score ${question.difficulty_score} outside range for ${currentLevel}`);
-            question.difficulty_score = Math.max(levelCriteria.difficulty_range[0], 
-              Math.min(levelCriteria.difficulty_range[1], question.difficulty_score));
-          }
-
-          // Ensure topic consistency
-          question.topic = selectedTopic.name;
-          
-          // Add topic category to tags if not present
-          if (!question.topic_tags.includes(selectedTopic.category)) {
-            question.topic_tags.push(selectedTopic.category);
-          }
-
-          validatedQuestions.push(question);
-        }
-
-        allQuestions = allQuestions.concat(validatedQuestions);
-        console.log(`Successfully generated ${validatedQuestions.length} topic-based questions for level ${currentLevel}`);
+      if (!openAIResponse.ok) {
+        const errorData = await openAIResponse.json();
+        console.error(`OpenAI API error for level ${currentLevel}:`, errorData);
+        throw new Error(`OpenAI API error for level ${currentLevel}: ${openAIResponse.statusText}`);
       }
+
+      const aiData = await openAIResponse.json();
       
-      console.log(`Total topic-based questions generated: ${allQuestions.length} for topic: ${selectedTopic.name}`);
+      if (aiData.choices[0].message.refusal) {
+        console.error(`OpenAI refused the request for level ${currentLevel}:`, aiData.choices[0].message.refusal);
+        throw new Error(`OpenAI refused the request for level ${currentLevel}`);
+      }
+
+      if (!aiData.choices[0].message.content) {
+        console.error(`No content received from OpenAI for level ${currentLevel}`);
+        throw new Error(`No content received from OpenAI for level ${currentLevel}`);
+      }
+
+      const questionsData = JSON.parse(aiData.choices[0].message.content);
+      
+      // Phase 3: Quality validation and enhancement
+      const validatedQuestions = [];
+      for (const question of questionsData.questions) {
+        // Validate and set combination data
+        question.level = currentLevel;
+        question.topic = selectedCombination.subject_topic;
+        question.grammar_topic = selectedCombination.grammar_topic;
+        question.grammar_category = selectedCombination.grammar_category;
+        question.subject_category = selectedCombination.subject_category;
+
+        // Validate difficulty score range
+        if (question.difficulty_score < levelCriteria.difficulty_range[0] || 
+            question.difficulty_score > levelCriteria.difficulty_range[1]) {
+          console.warn(`Difficulty score ${question.difficulty_score} outside range for ${currentLevel}`);
+          question.difficulty_score = Math.max(levelCriteria.difficulty_range[0], 
+            Math.min(levelCriteria.difficulty_range[1], question.difficulty_score));
+        }
+
+        // Enhance topic tags with grammar and subject information
+        if (!question.topic_tags.includes(selectedCombination.grammar_category)) {
+          question.topic_tags.push(selectedCombination.grammar_category);
+        }
+        if (!question.topic_tags.includes(selectedCombination.subject_category)) {
+          question.topic_tags.push(selectedCombination.subject_category);
+        }
+        if (!question.topic_tags.includes('grammar-focused')) {
+          question.topic_tags.push('grammar-focused');
+        }
+
+        validatedQuestions.push(question);
+      }
+
+      allQuestions = allQuestions.concat(validatedQuestions);
+      console.log(`Successfully generated ${validatedQuestions.length} grammar-focused questions`);
+      
+      console.log(`Total grammar-subject-CEF questions generated: ${allQuestions.length}`);
       
       // Transform wrong_answer_explanations from array to object format for database
       const transformedQuestions = allQuestions.map((q: any) => {
@@ -351,6 +421,9 @@ Make each question feel like a genuine language need someone might have in this 
           correct_answer: q.correct_answer,
           topic: q.topic,
           level: q.level,
+          grammar_topic: q.grammar_topic,
+          grammar_category: q.grammar_category,
+          subject_category: q.subject_category,
           explanation: q.explanation,
           detailed_explanation: q.detailed_explanation,
           first_principles_explanation: q.first_principles_explanation,
@@ -368,46 +441,28 @@ Make each question feel like a genuine language need someone might have in this 
         .select()
 
       if (insertError) {
-        console.error('Topic-based questions insertion error:', insertError);
-        throw new Error(`Failed to store topic-based questions: ${insertError.message}`);
+        console.error('Grammar-subject questions insertion error:', insertError);
+        throw new Error(`Failed to store grammar-subject questions: ${insertError.message}`);
       }
 
-      // Phase 4: Update topic usage tracking
-      await updateTopicUsage(supabaseClient, selectedTopic, levels);
+      // Phase 4: Update combination usage tracking
+      await updateGrammarCombinationUsage(supabaseClient, selectedCombination);
 
-      console.log('Successfully inserted topic-based questions:', insertedQuestions?.length);
-
-      // Generate report
-      const levelCounts = insertedQuestions?.reduce((acc: any, q: any) => {
-        acc[q.level] = (acc[q.level] || 0) + 1;
-        return acc;
-      }, {});
-
-      // Get updated total distribution
-      const { data: updatedDistribution } = await supabaseClient
-        .from('test_questions')
-        .select('level')
-        .not('level', 'is', null)
-
-      const updatedLevelCounts = updatedDistribution?.reduce((acc: any, q: any) => {
-        acc[q.level] = (acc[q.level] || 0) + 1;
-        return acc;
-      }, {}) || {};
+      console.log('Successfully inserted grammar-subject questions:', insertedQuestions?.length);
 
       return new Response(
         JSON.stringify({ 
           success: true,
           questionsGenerated: allQuestions.length,
-          selectedTopic: selectedTopic,
-          levelDistribution: levelCounts,
-          topicBasedEnhancements: [
-            'Topic-based unlimited variety system implemented',
-            'Real-world context grounding for all questions', 
-            'Intelligent topic selection and tracking',
-            'CEF level appropriateness within topic contexts',
-            '5 unique questions per level per topic'
+          selectedCombination: selectedCombination,
+          grammarSubjectEnhancements: [
+            'Grammar-Subject-CEF combination tracking implemented',
+            'Primary focus on grammatical competency testing', 
+            'Subject context integration for authentic scenarios',
+            'Intelligent combination selection and tracking',
+            'Quality grammar assessment within subject contexts',
+            `${questionsPerLevel} unique grammar-focused questions generated`
           ],
-          totalDatabaseDistribution: updatedLevelCounts,
           questions: insertedQuestions
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -420,11 +475,11 @@ Make each question feel like a genuine language need someone might have in this 
     )
 
   } catch (error) {
-    console.error('Topic-based question generation error:', error);
+    console.error('Grammar-subject question generation error:', error);
     return new Response(
       JSON.stringify({ 
         error: error.message,
-        details: 'Failed to generate topic-based questions. Please check your OpenAI API key and try again.'
+        details: 'Failed to generate grammar-subject questions. Please check your OpenAI API key and try again.'
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
@@ -434,65 +489,97 @@ Make each question feel like a genuine language need someone might have in this 
   }
 })
 
-// Helper function to select unused topic
-async function selectUnusedTopic(supabaseClient: any) {
-  // Flatten all topics into a single array with categories
-  const allTopics: any[] = [];
-  Object.entries(COMPREHENSIVE_TOPICS).forEach(([category, topics]) => {
-    topics.forEach(topic => {
-      allTopics.push({
-        name: topic,
-        category: category
-      });
-    });
-  });
+// Helper function to select unused grammar-subject-CEF combination
+async function selectUnusedGrammarCombination(supabaseClient: any) {
+  // Generate all possible combinations
+  const allCombinations: any[] = [];
+  
+  // Create combinations for each CEF level
+  for (const level of ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']) {
+    // Get grammar topics for this level
+    for (const [grammarCategory, levelTopics] of Object.entries(GRAMMAR_TOPICS)) {
+      const grammarTopicsForLevel = levelTopics[level as keyof typeof levelTopics] || [];
+      
+      for (const grammarTopic of grammarTopicsForLevel) {
+        // Combine with subject topics
+        for (const [subjectCategory, subjectTopics] of Object.entries(COMPREHENSIVE_TOPICS)) {
+          for (const subjectTopic of subjectTopics) {
+            allCombinations.push({
+              grammar_topic: grammarTopic,
+              grammar_category: grammarCategory,
+              subject_topic: subjectTopic,
+              subject_category: subjectCategory,
+              cef_level: level
+            });
+          }
+        }
+      }
+    }
+  }
 
-  // Get topics that haven't been used recently or have been used least
-  const { data: usedTopics } = await supabaseClient
-    .from('used_topics')
-    .select('topic_name, questions_generated, last_used_at')
+  console.log(`Total possible grammar-subject-CEF combinations: ${allCombinations.length}`);
+
+  // Get combinations that haven't been used recently or have been used least
+  const { data: usedCombinations } = await supabaseClient
+    .from('grammar_topic_combinations')
+    .select('grammar_topic, subject_topic, cef_level, questions_generated, last_used_at')
     .order('last_used_at', { ascending: true })
 
-  const usedTopicNames = new Set(usedTopics?.map((t: any) => t.topic_name) || []);
+  const usedCombinationKeys = new Set(
+    usedCombinations?.map((c: any) => `${c.grammar_topic}|${c.subject_topic}|${c.cef_level}`) || []
+  );
   
-  // Find unused topics first
-  const unusedTopics = allTopics.filter(topic => !usedTopicNames.has(topic.name));
+  // Find unused combinations first
+  const unusedCombinations = allCombinations.filter(combo => 
+    !usedCombinationKeys.has(`${combo.grammar_topic}|${combo.subject_topic}|${combo.cef_level}`)
+  );
   
-  if (unusedTopics.length > 0) {
-    // Randomly select from unused topics
-    const randomIndex = Math.floor(Math.random() * unusedTopics.length);
-    return unusedTopics[randomIndex];
+  if (unusedCombinations.length > 0) {
+    // Randomly select from unused combinations
+    const randomIndex = Math.floor(Math.random() * unusedCombinations.length);
+    console.log(`Selected from ${unusedCombinations.length} unused combinations`);
+    return unusedCombinations[randomIndex];
   }
   
-  // If all topics have been used, select the least recently used
-  const leastUsedTopic = usedTopics?.[0];
-  if (leastUsedTopic) {
-    const topicData = allTopics.find(t => t.name === leastUsedTopic.topic_name);
-    if (topicData) return topicData;
+  // If all combinations have been used, select the least recently used
+  const leastUsedCombination = usedCombinations?.[0];
+  if (leastUsedCombination) {
+    const combinationData = allCombinations.find(c => 
+      c.grammar_topic === leastUsedCombination.grammar_topic &&
+      c.subject_topic === leastUsedCombination.subject_topic &&
+      c.cef_level === leastUsedCombination.cef_level
+    );
+    if (combinationData) {
+      console.log(`Selected least recently used combination`);
+      return combinationData;
+    }
   }
   
-  // Fallback: select random topic
-  const randomIndex = Math.floor(Math.random() * allTopics.length);
-  return allTopics[randomIndex];
+  // Fallback: select random combination
+  const randomIndex = Math.floor(Math.random() * allCombinations.length);
+  console.log(`Fallback: selected random combination`);
+  return allCombinations[randomIndex];
 }
 
-// Helper function to update topic usage
-async function updateTopicUsage(supabaseClient: any, selectedTopic: any, levels: string[]) {
-  for (const level of levels) {
-    const { error } = await supabaseClient
-      .from('used_topics')
-      .upsert({
-        topic_name: selectedTopic.name,
-        topic_category: selectedTopic.category,
-        cef_level: level,
-        questions_generated: 5, // 5 questions per level
-        last_used_at: new Date().toISOString()
-      }, {
-        onConflict: 'topic_name,cef_level'
-      });
+// Helper function to update grammar combination usage
+async function updateGrammarCombinationUsage(supabaseClient: any, selectedCombination: any) {
+  const { error } = await supabaseClient
+    .from('grammar_topic_combinations')
+    .upsert({
+      grammar_topic: selectedCombination.grammar_topic,
+      grammar_category: selectedCombination.grammar_category,
+      subject_topic: selectedCombination.subject_topic,
+      subject_category: selectedCombination.subject_category,
+      cef_level: selectedCombination.cef_level,
+      questions_generated: 5, // 5 questions per combination
+      last_used_at: new Date().toISOString()
+    }, {
+      onConflict: 'grammar_topic,subject_topic,cef_level'
+    });
 
-    if (error) {
-      console.error(`Error updating topic usage for ${selectedTopic.name} at ${level}:`, error);
-    }
+  if (error) {
+    console.error(`Error updating grammar combination usage:`, error);
+  } else {
+    console.log(`Successfully tracked grammar combination usage`);
   }
 }

@@ -75,10 +75,10 @@ serve(async (req) => {
         selectedQuestions = adaptiveQuestions || [];
         console.log(`Selected ${selectedQuestions.length} adaptive questions starting at B1`);
       } else {
-        // First, check what questions are actually available in the database
+        // Enhanced question selection with grammar awareness
         const { data: allQuestions, error: allQuestionsError } = await supabaseClient
           .from('test_questions')
-          .select('id, question, level, topic')
+          .select('id, question, level, topic, grammar_topic, grammar_category, subject_category')
           .not('question', 'is', null)
           .not('level', 'is', null)
 
@@ -93,7 +93,7 @@ serve(async (req) => {
           throw new Error('No questions found in database. Please generate questions first.');
         }
 
-        // Balanced selection logic for comprehensive test
+        // Enhanced balanced selection logic with grammar variety
         const levels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
         const questionsPerLevel = 2;
         const extraQuestions = 3;
@@ -108,7 +108,7 @@ serve(async (req) => {
             .eq('level', level)
             .not('question', 'is', null)
             .not('correct_answer', 'is', null)
-            .limit(targetCount * 2)
+            .limit(targetCount * 3) // Get more options for better variety
 
           if (questionsError) {
             console.error(`Questions fetch error for level ${level}:`, questionsError);
@@ -131,10 +131,11 @@ serve(async (req) => {
             const seenQuestionIds = new Set(seenQuestions?.map(sq => sq.question_id) || []);
             const unseenQuestions = levelQuestions.filter(q => !seenQuestionIds.has(q.id));
             
-            const questionsToAdd = unseenQuestions.slice(0, targetCount);
+            // Prioritize grammar variety in selection
+            const questionsToAdd = selectDiverseGrammarQuestions(unseenQuestions, targetCount);
             selectedQuestions = selectedQuestions.concat(questionsToAdd);
           } else {
-            const questionsToAdd = levelQuestions.slice(0, targetCount);
+            const questionsToAdd = selectDiverseGrammarQuestions(levelQuestions, targetCount);
             selectedQuestions = selectedQuestions.concat(questionsToAdd);
           }
         }
@@ -172,7 +173,16 @@ serve(async (req) => {
         acc[q.level] = (acc[q.level] || 0) + 1;
         return acc;
       }, {});
+      
+      const grammarCounts = selectedQuestions.reduce((acc: any, q: any) => {
+        if (q.grammar_category) {
+          acc[q.grammar_category] = (acc[q.grammar_category] || 0) + 1;
+        }
+        return acc;
+      }, {});
+      
       console.log('Final assessment level distribution:', finalLevelCounts);
+      console.log('Grammar category distribution:', grammarCounts);
 
       return new Response(
         JSON.stringify({ 
@@ -180,6 +190,7 @@ serve(async (req) => {
           questions: selectedQuestions,
           estimatedTime: isAdaptive ? 15 : 20,
           levelDistribution: finalLevelCounts,
+          grammarDistribution: grammarCounts,
           assessmentType: assessment_type || 'comprehensive'
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -405,3 +416,48 @@ serve(async (req) => {
     )
   }
 })
+
+// Helper function to select diverse grammar questions
+function selectDiverseGrammarQuestions(questions: any[], targetCount: number) {
+  if (questions.length <= targetCount) {
+    return questions;
+  }
+
+  // Group questions by grammar category for diversity
+  const grammarGroups: { [key: string]: any[] } = {};
+  questions.forEach(q => {
+    const category = q.grammar_category || 'general';
+    if (!grammarGroups[category]) {
+      grammarGroups[category] = [];
+    }
+    grammarGroups[category].push(q);
+  });
+
+  const selected: any[] = [];
+  const categories = Object.keys(grammarGroups);
+  
+  // Round-robin selection to ensure grammar variety
+  let categoryIndex = 0;
+  while (selected.length < targetCount && categories.length > 0) {
+    const currentCategory = categories[categoryIndex];
+    const categoryQuestions = grammarGroups[currentCategory];
+    
+    if (categoryQuestions.length > 0) {
+      // Random selection within category
+      const randomIndex = Math.floor(Math.random() * categoryQuestions.length);
+      selected.push(categoryQuestions.splice(randomIndex, 1)[0]);
+    }
+    
+    // Remove empty categories
+    if (categoryQuestions.length === 0) {
+      categories.splice(categoryIndex, 1);
+      if (categoryIndex >= categories.length) {
+        categoryIndex = 0;
+      }
+    } else {
+      categoryIndex = (categoryIndex + 1) % categories.length;
+    }
+  }
+
+  return selected;
+}
