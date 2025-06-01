@@ -134,3 +134,12 @@ export const getNextDifficultyLevel = (
 
   return currentLevel;
 };
+
+export const useAdaptiveScoring = () => {
+  return {
+    LEVEL_WEIGHTS,
+    calculateWeightedScore,
+    determineAdaptiveLevel,
+    getNextDifficultyLevel
+  };
+};
