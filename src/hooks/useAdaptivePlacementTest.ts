@@ -1,4 +1,3 @@
-
 import { atom, useAtom } from 'jotai';
 import { produce } from 'immer';
 import { supabase } from '@/integrations/supabase/client';
@@ -115,7 +114,7 @@ export const useAdaptivePlacementTest = () => {
   };
 
   const loadAdaptiveQuestionPool = async (testId: string) => {
-    // Get questions with unique grammar topics across all levels
+    // Get questions with complete grammar metadata only
     const { data: availableQuestions, error: questionsError } = await supabase
       .from('test_questions')
       .select('*')
@@ -131,6 +130,8 @@ export const useAdaptivePlacementTest = () => {
       throw new Error('No questions available in database');
     }
 
+    console.log(`Found ${availableQuestions.length} questions with complete grammar metadata`);
+
     // Filter out recently seen questions (last 30 days)
     let questionPool = availableQuestions;
     if (user) {
@@ -144,95 +145,81 @@ export const useAdaptivePlacementTest = () => {
       questionPool = availableQuestions.filter(q => !seenQuestionIds.has(q.id));
     }
 
-    // Ensure we have enough questions with unique grammar topics
-    const grammarTopicMap = new Map<string, any>();
-    const levelGroups: Record<string, any[]> = {
-      'A1': [], 'A2': [], 'B1': [], 'B2': [], 'C1': [], 'C2': []
-    };
-
-    // Group questions by level and track unique grammar topics
+    // Group by unique grammar topics and select exactly 15
+    const grammarTopicMap = new Map<string, any[]>();
     questionPool.forEach(question => {
       const grammarTopic = question.grammar_topic;
-      const level = question.level || 'B1';
-      
-      if (grammarTopic && !grammarTopicMap.has(grammarTopic)) {
-        grammarTopicMap.set(grammarTopic, question);
-        if (levelGroups[level]) {
-          levelGroups[level].push(question);
+      if (grammarTopic) {
+        if (!grammarTopicMap.has(grammarTopic)) {
+          grammarTopicMap.set(grammarTopic, []);
         }
+        grammarTopicMap.get(grammarTopic)!.push(question);
       }
     });
 
-    // Adaptive selection strategy: prioritize current difficulty with variety
+    // Ensure we have at least 15 unique grammar topics
+    const availableTopics = Array.from(grammarTopicMap.keys());
+    if (availableTopics.length < 15) {
+      throw new Error(`Insufficient unique grammar topics. Found ${availableTopics.length}, need 15.`);
+    }
+
+    // Select exactly 15 unique grammar topics, prioritizing variety across levels
     const selectedQuestions: any[] = [];
     const usedGrammarTopics = new Set<string>();
     
-    // Start with B1 level questions (adaptive starting point)
-    const levels = ['B1', 'B2', 'A2', 'C1', 'A1', 'C2'];
+    // Prioritize level distribution for adaptive questioning
+    const levelPriority = ['B1', 'B2', 'A2', 'C1', 'A1', 'C2'];
     
-    for (const level of levels) {
-      const levelQuestions = levelGroups[level] || [];
+    for (const level of levelPriority) {
+      if (selectedQuestions.length >= 15) break;
       
-      // Shuffle questions for randomization
-      for (let i = levelQuestions.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [levelQuestions[i], levelQuestions[j]] = [levelQuestions[j], levelQuestions[i]];
-      }
-      
-      // Add unique grammar topic questions from this level
-      for (const question of levelQuestions) {
+      // Get topics that have questions at this level
+      for (const [topic, questions] of grammarTopicMap.entries()) {
         if (selectedQuestions.length >= 15) break;
+        if (usedGrammarTopics.has(topic)) continue;
         
-        if (!usedGrammarTopics.has(question.grammar_topic)) {
-          selectedQuestions.push(question);
-          usedGrammarTopics.add(question.grammar_topic);
+        const levelQuestions = questions.filter(q => q.level === level);
+        if (levelQuestions.length > 0) {
+          // Pick a random question from this topic at this level
+          const randomQuestion = levelQuestions[Math.floor(Math.random() * levelQuestions.length)];
+          selectedQuestions.push(randomQuestion);
+          usedGrammarTopics.add(topic);
           
           // Track grammar usage for this test
           await supabase
             .from('test_grammar_usage')
             .insert({
               test_id: testId,
-              grammar_topic: question.grammar_topic,
-              grammar_category: question.grammar_category || 'unknown'
-            })
-            .on('conflict', () => {}); // Ignore duplicates
+              grammar_topic: randomQuestion.grammar_topic,
+              grammar_category: randomQuestion.grammar_category || 'unknown'
+            });
         }
       }
-      
-      if (selectedQuestions.length >= 15) break;
     }
 
-    // If we still don't have 15 unique questions, add fallbacks
+    // Fill remaining slots with any unused topics
     if (selectedQuestions.length < 15) {
-      const remainingQuestions = questionPool.filter(q => 
-        q.grammar_topic && !usedGrammarTopics.has(q.grammar_topic)
-      );
-      
-      // Shuffle and add remaining
-      for (let i = remainingQuestions.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [remainingQuestions[i], remainingQuestions[j]] = [remainingQuestions[j], remainingQuestions[i]];
-      }
-      
-      for (const question of remainingQuestions) {
+      for (const [topic, questions] of grammarTopicMap.entries()) {
         if (selectedQuestions.length >= 15) break;
-        selectedQuestions.push(question);
-        usedGrammarTopics.add(question.grammar_topic);
+        if (usedGrammarTopics.has(topic)) continue;
+        
+        const randomQuestion = questions[Math.floor(Math.random() * questions.length)];
+        selectedQuestions.push(randomQuestion);
+        usedGrammarTopics.add(topic);
         
         await supabase
           .from('test_grammar_usage')
           .insert({
             test_id: testId,
-            grammar_topic: question.grammar_topic,
-            grammar_category: question.grammar_category || 'unknown'
-          })
-          .on('conflict', () => {});
+            grammar_topic: randomQuestion.grammar_topic,
+            grammar_category: randomQuestion.grammar_category || 'unknown'
+          });
       }
     }
 
-    console.log(`✅ Loaded ${selectedQuestions.length} questions with ${usedGrammarTopics.size} unique grammar topics`);
+    console.log(`✅ Selected exactly ${selectedQuestions.length} questions with ${usedGrammarTopics.size} unique grammar topics`);
     
-    return selectedQuestions;
+    return selectedQuestions.slice(0, 15); // Ensure exactly 15 questions
   };
 
   const submitAdaptiveAnswer = async () => {

@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import "https://deno.land/x/xhr@0.1.0/mod.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -59,15 +58,9 @@ serve(async (req) => {
       let selectedQuestions: any[] = [];
 
       if (isAdaptive) {
-        // Enhanced adaptive question selection with guaranteed 15 unique grammar topics
         selectedQuestions = await selectAdaptiveQuestions(supabaseClient, user_id, testData.id);
-        
-        console.log(`Selected ${selectedQuestions.length} adaptive questions with unique grammar topics`);
       } else {
-        // Enhanced comprehensive selection with guaranteed variety
         selectedQuestions = await selectComprehensiveQuestions(supabaseClient, user_id, testData.id);
-        
-        console.log(`Selected ${selectedQuestions.length} comprehensive questions with balanced distribution`);
       }
 
       if (selectedQuestions.length < 15) {
@@ -396,7 +389,7 @@ serve(async (req) => {
 
 // Enhanced question selection for adaptive mode
 async function selectAdaptiveQuestions(supabaseClient: any, userId: string, testId: string) {
-  // Get all questions with complete grammar metadata
+  // Get all questions with COMPLETE grammar metadata only
   const { data: allQuestions, error: fetchError } = await supabaseClient
     .from('test_questions')
     .select('*')
@@ -410,6 +403,12 @@ async function selectAdaptiveQuestions(supabaseClient: any, userId: string, test
     throw new Error('Failed to fetch questions with complete grammar metadata');
   }
 
+  console.log(`Found ${allQuestions.length} questions with complete metadata in database`);
+
+  if (allQuestions.length === 0) {
+    throw new Error('No questions available in database');
+  }
+
   // Filter out recently seen questions (30-day cooldown)
   const { data: seenQuestions } = await supabaseClient
     .from('user_question_history')
@@ -420,8 +419,10 @@ async function selectAdaptiveQuestions(supabaseClient: any, userId: string, test
   const seenQuestionIds = new Set(seenQuestions?.map((sq: any) => sq.question_id) || []);
   const availableQuestions = allQuestions.filter((q: any) => !seenQuestionIds.has(q.id));
 
+  console.log(`Available questions after filtering seen: ${availableQuestions.length}`);
+
   // Group by unique grammar topics
-  const grammarTopicMap = new Map<string, any>();
+  const grammarTopicMap = new Map<string, any[]>();
   availableQuestions.forEach((question: any) => {
     const grammarTopic = question.grammar_topic;
     if (!grammarTopicMap.has(grammarTopic)) {
@@ -430,7 +431,14 @@ async function selectAdaptiveQuestions(supabaseClient: any, userId: string, test
     grammarTopicMap.get(grammarTopic).push(question);
   });
 
-  // Select one question per unique grammar topic, prioritizing variety
+  const availableTopics = Array.from(grammarTopicMap.keys());
+  console.log(`Found ${availableTopics.length} unique grammar topics`);
+
+  if (availableTopics.length < 15) {
+    throw new Error(`Insufficient unique grammar topics. Found ${availableTopics.length}, need 15.`);
+  }
+
+  // Select exactly 15 questions with unique grammar topics
   const selectedQuestions: any[] = [];
   const usedGrammarTopics = new Set<string>();
   
@@ -440,68 +448,56 @@ async function selectAdaptiveQuestions(supabaseClient: any, userId: string, test
   for (const level of levelPriority) {
     if (selectedQuestions.length >= 15) break;
     
-    // Get questions from this level with unique grammar topics
-    const levelQuestions = availableQuestions.filter((q: any) => 
-      q.level === level && !usedGrammarTopics.has(q.grammar_topic)
-    );
-    
-    // Shuffle for randomization
-    for (let i = levelQuestions.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [levelQuestions[i], levelQuestions[j]] = [levelQuestions[j], levelQuestions[i]];
-    }
-    
-    // Add questions with unique grammar topics
-    for (const question of levelQuestions) {
+    // Get available topics for this level
+    for (const [topic, questions] of grammarTopicMap.entries()) {
       if (selectedQuestions.length >= 15) break;
+      if (usedGrammarTopics.has(topic)) continue;
       
-      if (!usedGrammarTopics.has(question.grammar_topic)) {
-        selectedQuestions.push(question);
-        usedGrammarTopics.add(question.grammar_topic);
+      const levelQuestions = questions.filter((q: any) => q.level === level);
+      if (levelQuestions.length > 0) {
+        // Random selection from available questions for this topic/level
+        const randomIndex = Math.floor(Math.random() * levelQuestions.length);
+        const selectedQuestion = levelQuestions[randomIndex];
+        
+        selectedQuestions.push(selectedQuestion);
+        usedGrammarTopics.add(topic);
         
         // Track grammar usage
         await supabaseClient
           .from('test_grammar_usage')
           .insert({
             test_id: testId,
-            grammar_topic: question.grammar_topic,
-            grammar_category: question.grammar_category
-          })
-          .on('conflict', () => {});
+            grammar_topic: selectedQuestion.grammar_topic,
+            grammar_category: selectedQuestion.grammar_category
+          });
       }
     }
   }
   
-  // Fill remaining slots with any unique grammar topics if needed
+  // Fill remaining slots with any unused topics
   if (selectedQuestions.length < 15) {
-    const remainingQuestions = availableQuestions.filter((q: any) => 
-      !usedGrammarTopics.has(q.grammar_topic)
-    );
-    
-    // Shuffle and add
-    for (let i = remainingQuestions.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [remainingQuestions[i], remainingQuestions[j]] = [remainingQuestions[j], remainingQuestions[i]];
-    }
-    
-    for (const question of remainingQuestions) {
+    for (const [topic, questions] of grammarTopicMap.entries()) {
       if (selectedQuestions.length >= 15) break;
+      if (usedGrammarTopics.has(topic)) continue;
       
-      selectedQuestions.push(question);
-      usedGrammarTopics.add(question.grammar_topic);
+      const randomIndex = Math.floor(Math.random() * questions.length);
+      const selectedQuestion = questions[randomIndex];
+      
+      selectedQuestions.push(selectedQuestion);
+      usedGrammarTopics.add(topic);
       
       await supabaseClient
         .from('test_grammar_usage')
         .insert({
           test_id: testId,
-          grammar_topic: question.grammar_topic,
-          grammar_category: question.grammar_category
-        })
-        .on('conflict', () => {});
+          grammar_topic: selectedQuestion.grammar_topic,
+          grammar_category: selectedQuestion.grammar_category
+        });
     }
   }
 
-  return selectedQuestions;
+  console.log(`✅ Selected exactly ${selectedQuestions.length} questions with ${usedGrammarTopics.size} unique grammar topics`);
+  return selectedQuestions.slice(0, 15);
 }
 
 // Enhanced question selection for comprehensive mode
@@ -520,6 +516,12 @@ async function selectComprehensiveQuestions(supabaseClient: any, userId: string,
     throw new Error('Failed to fetch questions with complete metadata');
   }
 
+  console.log(`Found ${allQuestions.length} questions with complete metadata`);
+
+  if (allQuestions.length === 0) {
+    throw new Error('No questions available in database');
+  }
+
   // Filter unseen questions
   const { data: seenQuestions } = await supabaseClient
     .from('user_question_history')
@@ -529,6 +531,8 @@ async function selectComprehensiveQuestions(supabaseClient: any, userId: string,
 
   const seenQuestionIds = new Set(seenQuestions?.map((sq: any) => sq.question_id) || []);
   const availableQuestions = allQuestions.filter((q: any) => !seenQuestionIds.has(q.id));
+
+  console.log(`Available questions after filtering seen: ${availableQuestions.length}`);
 
   // Balanced selection: 2-3 questions per level with unique grammar topics
   const levels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
