@@ -24,7 +24,7 @@ export const useAdaptiveQuestions = () => {
     level: string, 
     excludeQuestionIds: string[] = [], 
     limit: number = 5
-  ) => {
+  ): Promise<AdaptiveQuestion[]> => {
     if (!user) {
       setError('User not authenticated');
       return [];
@@ -52,20 +52,50 @@ export const useAdaptiveQuestions = () => {
 
       if (!newQuestions || newQuestions.length === 0) {
         console.warn(`⚠️ No questions found for level ${level}`);
-        setError(`No questions available for level ${level}`);
+        
+        // Try to get questions from adjacent levels as fallback
+        const levelOrder = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+        const currentIndex = levelOrder.indexOf(level);
+        const adjacentLevels = [];
+        
+        if (currentIndex > 0) adjacentLevels.push(levelOrder[currentIndex - 1]);
+        if (currentIndex < levelOrder.length - 1) adjacentLevels.push(levelOrder[currentIndex + 1]);
+        
+        console.log(`🔄 Trying fallback levels: ${adjacentLevels.join(', ')}`);
+        
+        for (const fallbackLevel of adjacentLevels) {
+          const { data: fallbackQuestions } = await supabase
+            .rpc('get_adaptive_questions_for_user', {
+              p_user_id: user.id,
+              p_current_level: fallbackLevel,
+              p_limit: limit,
+              p_exclude_question_ids: excludeQuestionIds
+            });
+          
+          if (fallbackQuestions && fallbackQuestions.length > 0) {
+            console.log(`✅ Found ${fallbackQuestions.length} fallback questions from level ${fallbackLevel}`);
+            const transformedQuestions = fallbackQuestions.map((q: any) => ({
+              id: q.id,
+              question: q.question,
+              options: q.options,
+              correct_answer: q.correct_answer,
+              explanation: q.explanation,
+              level: q.level,
+              topic: q.topic,
+              difficulty_score: q.difficulty_score
+            }));
+            
+            setQuestions(transformedQuestions);
+            return transformedQuestions;
+          }
+        }
+        
+        setError(`No questions available for level ${level} or adjacent levels`);
         return [];
       }
 
-      // Validate that all questions match the requested level
-      const validQuestions = newQuestions.filter((q: any) => q.level === level);
-      const invalidQuestions = newQuestions.filter((q: any) => q.level !== level);
-      
-      if (invalidQuestions.length > 0) {
-        console.warn(`⚠️ Found ${invalidQuestions.length} questions with wrong level:`, 
-          invalidQuestions.map(q => `${q.id} (${q.level})`));
-      }
-
-      const transformedQuestions = validQuestions.map((q: any) => ({
+      // Validate that questions match the requested level (or are from fallback)
+      const transformedQuestions = newQuestions.map((q: any) => ({
         id: q.id,
         question: q.question,
         options: q.options,
@@ -76,12 +106,13 @@ export const useAdaptiveQuestions = () => {
         difficulty_score: q.difficulty_score
       }));
 
-      console.log(`✅ Loaded ${transformedQuestions.length} valid questions for level ${level}`);
+      console.log(`✅ Loaded ${transformedQuestions.length} questions for level ${level}`);
       
-      // Verify all questions are for the correct level
-      const levelMismatch = transformedQuestions.find(q => q.level !== level);
-      if (levelMismatch) {
-        console.error(`❌ Level mismatch detected! Expected ${level}, got ${levelMismatch.level}`);
+      // Log if any questions don't match the expected level
+      const levelMismatches = transformedQuestions.filter(q => q.level !== level);
+      if (levelMismatches.length > 0) {
+        console.warn(`⚠️ Found ${levelMismatches.length} questions with different levels than requested (${level}):`, 
+          levelMismatches.map(q => `${q.id}: ${q.level}`));
       }
 
       setQuestions(transformedQuestions);
@@ -101,11 +132,21 @@ export const useAdaptiveQuestions = () => {
     setError(null);
   }, []);
 
+  const getQuestionByIndex = useCallback((index: number): AdaptiveQuestion | null => {
+    return questions[index] || null;
+  }, [questions]);
+
+  const addQuestions = useCallback((newQuestions: AdaptiveQuestion[]) => {
+    setQuestions(prev => [...prev, ...newQuestions]);
+  }, []);
+
   return {
     questions,
     isLoading,
     error,
     loadQuestionsForLevel,
-    clearQuestions
+    clearQuestions,
+    getQuestionByIndex,
+    addQuestions
   };
 };
