@@ -35,44 +35,42 @@ export const useAdaptiveDifficulty = () => {
     ]);
   }, [currentLevel]);
 
+  const shouldForceChange = useCallback(() => {
+    const isAtBottom = currentLevel === 'A1';
+    const isAtTop = currentLevel === 'C2';
+    
+    // STRICT RULE: Force change after exactly 3 questions (unless at extremes)
+    return questionsAtCurrentLevel >= 3 && !isAtBottom && !isAtTop;
+  }, [questionsAtCurrentLevel, currentLevel]);
+
   const calculateNextLevel = useCallback(() => {
     const isAtBottom = currentLevel === 'A1';
     const isAtTop = currentLevel === 'C2';
     
-    // Check if we need to force a level change due to stagnation (3+ questions at same level)
-    const shouldForceChange = questionsAtCurrentLevel >= 3 && !isAtBottom && !isAtTop;
-    
-    if (shouldForceChange) {
-      console.log(`🔄 FORCING level change after ${questionsAtCurrentLevel} questions at ${currentLevel}`);
+    // STRICT ENFORCEMENT: Force change after 3 questions
+    if (shouldForceChange()) {
+      console.log(`🔄 FORCING level change after exactly 3 questions at ${currentLevel}`);
       
-      // Analyze recent performance at this level to decide direction
-      const recentPerformance = levelPerformanceHistory
+      // Analyze performance at this level for forcing direction
+      const currentLevelPerformance = levelPerformanceHistory
         .filter(entry => entry.level === currentLevel)
         .slice(-3); // Last 3 answers at this level
       
-      const correctCount = recentPerformance.filter(entry => entry.correct).length;
-      const performanceRatio = correctCount / recentPerformance.length;
+      const correctCount = currentLevelPerformance.filter(entry => entry.correct).length;
+      const performanceRatio = correctCount / Math.max(currentLevelPerformance.length, 1);
       
-      console.log(`📊 Performance analysis: ${correctCount}/${recentPerformance.length} = ${performanceRatio}`);
+      console.log(`📊 Force direction analysis: ${correctCount}/${currentLevelPerformance.length} = ${performanceRatio}`);
       
-      // Force direction based on performance
       const levelOrder = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
       const currentIndex = levelOrder.indexOf(currentLevel);
       
-      if (performanceRatio >= 0.67) { // 2/3 or better
-        // Move up if possible
+      if (performanceRatio >= 0.67) { // 2/3 or better - move up
         const nextLevel = currentIndex < levelOrder.length - 1 ? levelOrder[currentIndex + 1] : currentLevel;
         console.log(`📈 FORCING UP: ${currentLevel} → ${nextLevel} (performance: ${performanceRatio})`);
         return nextLevel;
-      } else if (performanceRatio <= 0.33) { // 1/3 or worse
-        // Move down if possible
+      } else { // Poor performance - move down
         const nextLevel = currentIndex > 0 ? levelOrder[currentIndex - 1] : currentLevel;
         console.log(`📉 FORCING DOWN: ${currentLevel} → ${nextLevel} (performance: ${performanceRatio})`);
-        return nextLevel;
-      } else {
-        // Borderline performance - slight preference to move up for engagement
-        const nextLevel = currentIndex < levelOrder.length - 1 ? levelOrder[currentIndex + 1] : currentLevel;
-        console.log(`🎯 FORCING UP (borderline): ${currentLevel} → ${nextLevel} (performance: ${performanceRatio})`);
         return nextLevel;
       }
     }
@@ -85,18 +83,18 @@ export const useAdaptiveDifficulty = () => {
       consecutiveWrong
     );
 
-    console.log(`📊 Normal difficulty calculation: current=${currentLevel}, next=${nextLevel}, consCorrect=${consecutiveCorrect}, consWrong=${consecutiveWrong}, questionsAtLevel=${questionsAtCurrentLevel}`);
+    console.log(`📊 Normal adaptation: current=${currentLevel}, next=${nextLevel}, consCorrect=${consecutiveCorrect}, consWrong=${consecutiveWrong}, questionsAtLevel=${questionsAtCurrentLevel}`);
 
     return nextLevel;
-  }, [currentLevel, lastAnswerCorrect, consecutiveCorrect, consecutiveWrong, questionsAtCurrentLevel, levelPerformanceHistory, getNextDifficultyLevel]);
+  }, [currentLevel, lastAnswerCorrect, consecutiveCorrect, consecutiveWrong, questionsAtCurrentLevel, levelPerformanceHistory, getNextDifficultyLevel, shouldForceChange]);
 
   const updateLevel = useCallback((newLevel: string) => {
     if (newLevel !== currentLevel) {
-      console.log(`🚀 DIFFICULTY CHANGE: ${currentLevel} → ${newLevel} (after ${questionsAtCurrentLevel} questions)`);
+      console.log(`🚀 LEVEL CHANGE: ${currentLevel} → ${newLevel} (after ${questionsAtCurrentLevel} questions)`);
       setCurrentLevel(newLevel);
       setProgression(prev => [...prev, newLevel]);
       
-      // Reset consecutive counters and level question count when level changes
+      // Reset counters when level changes
       setConsecutiveCorrect(0);
       setConsecutiveWrong(0);
       setQuestionsAtCurrentLevel(0);
@@ -105,6 +103,10 @@ export const useAdaptiveDifficulty = () => {
     }
     return false; // Level stayed the same
   }, [currentLevel, questionsAtCurrentLevel]);
+
+  const mustChangeLevel = useCallback(() => {
+    return shouldForceChange();
+  }, [shouldForceChange]);
 
   const reset = useCallback(() => {
     console.log('🔄 Resetting difficulty tracking');
@@ -127,6 +129,8 @@ export const useAdaptiveDifficulty = () => {
     processAnswer,
     calculateNextLevel,
     updateLevel,
+    mustChangeLevel,
+    shouldForceChange,
     reset
   };
 };

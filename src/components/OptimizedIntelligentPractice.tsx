@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Target, Clock, TrendingUp, AlertCircle, CheckCircle, XCircle } from 'lucide-react';
+import { Target, Clock, TrendingUp, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 import { usePracticeSession } from '@/hooks/usePracticeSession';
 import { useAIFeedback } from '@/hooks/useAIFeedback';
 import { useAuth } from '@/hooks/useAuth';
@@ -49,6 +49,7 @@ const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> 
     processAnswer,
     calculateNextLevel,
     updateLevel,
+    mustChangeLevel,
     reset
   } = useAdaptiveDifficulty();
   
@@ -56,17 +57,18 @@ const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> 
   const [userAnswer, setUserAnswer] = useState('');
   const [selectedOption, setSelectedOption] = useState('');
   const [showFeedback, setShowFeedback] = useState(false);
-  const [questionsAsked, setQuestionsAsked] = useState(0);
-  const [maxQuestions] = useState(15); // Enforce 15 questions minimum
+  const [totalQuestionsAsked, setTotalQuestionsAsked] = useState(0);
   const [usedQuestionIds, setUsedQuestionIds] = useState<string[]>([]);
-  const [isLevelTransitioning, setIsLevelTransitioning] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
 
+  // STRICT ENFORCEMENT: Exactly 15 questions
+  const REQUIRED_QUESTIONS = 15;
   const currentQuestion = getQuestionByIndex(currentQuestionIndex);
 
   // Initialize session and load first batch of questions
   useEffect(() => {
     if (user && !currentSession) {
-      console.log('🎬 Initializing adaptive practice session');
+      console.log('🎬 Initializing adaptive practice session - STRICT MODE');
       initializeSession();
     }
   }, [user, currentSession]);
@@ -75,13 +77,15 @@ const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> 
     createSession();
     reset();
     setCurrentQuestionIndex(0);
-    setQuestionsAsked(0);
+    setTotalQuestionsAsked(0);
     setUsedQuestionIds([]);
+    setIsTransitioning(false);
     await loadInitialQuestions();
   };
 
   const loadInitialQuestions = async () => {
-    console.log('🚀 Loading initial questions for level B1');
+    console.log('🚀 Loading initial questions for level B1 - STRICT MODE');
+    setIsTransitioning(true);
     try {
       const initialQuestions = await loadQuestionsForLevel('B1', [], 5);
       if (initialQuestions.length > 0) {
@@ -89,42 +93,13 @@ const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> 
       }
     } catch (error) {
       console.error('Failed to load initial questions:', error);
+    } finally {
+      setIsTransitioning(false);
     }
-  };
-
-  const ensureQuestionsAvailable = async (targetLevel: string): Promise<boolean> => {
-    // Check if we have enough questions remaining for this level
-    const remainingQuestions = questions.length - currentQuestionIndex - 1;
-    
-    if (remainingQuestions < 2) {
-      console.log(`📥 Loading more questions for level ${targetLevel} (${remainingQuestions} remaining)`);
-      setIsLevelTransitioning(true);
-      
-      try {
-        const newQuestions = await loadQuestionsForLevel(targetLevel, usedQuestionIds, 5);
-        
-        if (newQuestions.length === 0) {
-          console.warn(`⚠️ No more questions available for level ${targetLevel}`);
-          setIsLevelTransitioning(false);
-          return false;
-        }
-        
-        // Reset to start of new question pool
-        setCurrentQuestionIndex(0);
-        setIsLevelTransitioning(false);
-        return true;
-      } catch (error) {
-        console.error('Error loading questions:', error);
-        setIsLevelTransitioning(false);
-        return false;
-      }
-    }
-    
-    return true;
   };
 
   const submitAnswer = async () => {
-    if (!currentQuestion || !currentSession) return;
+    if (!currentQuestion || !currentSession || isTransitioning) return;
 
     const answer = selectedOption || userAnswer;
     if (!answer.trim()) return;
@@ -132,8 +107,7 @@ const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> 
     const correctAnswer = currentQuestion.correct_answer;
     const isCorrect = answer.toLowerCase().trim() === correctAnswer.toLowerCase().trim();
 
-    console.log(`🎯 Answer ${questionsAsked + 1}/15: ${isCorrect ? 'CORRECT' : 'INCORRECT'} for level ${currentQuestion.level}`);
-    console.log(`📊 Current state: Level ${currentLevel}, ${questionsAtCurrentLevel} questions at this level`);
+    console.log(`🎯 Answer ${totalQuestionsAsked + 1}/${REQUIRED_QUESTIONS}: ${isCorrect ? 'CORRECT' : 'INCORRECT'} for level ${currentQuestion.level}`);
     
     // Process the answer for difficulty tracking
     processAnswer(isCorrect);
@@ -151,16 +125,18 @@ const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> 
     // Update progress
     updateProgress({ sessionId: currentSession.id, isCorrect });
 
-    setQuestionsAsked(prev => prev + 1);
+    setTotalQuestionsAsked(prev => prev + 1);
     setShowFeedback(true);
   };
 
   const nextQuestion = async () => {
-    const newQuestionsAsked = questionsAsked + 1;
+    if (isTransitioning) return;
+
+    const newTotalAsked = totalQuestionsAsked + 1;
     
-    // ENFORCE 15 QUESTION MINIMUM - only complete after exactly 15 questions
-    if (newQuestionsAsked >= maxQuestions) {
-      console.log('🏁 Completing session after 15 questions');
+    // STRICT ENFORCEMENT: Complete after exactly 15 questions
+    if (newTotalAsked >= REQUIRED_QUESTIONS) {
+      console.log('🏁 Completing session after EXACTLY 15 questions');
       if (currentSession) {
         await completeSession(currentSession.id);
       }
@@ -168,48 +144,81 @@ const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> 
       return;
     }
 
-    // Calculate next difficulty level
-    const nextLevel = calculateNextLevel();
-    const levelChanged = updateLevel(nextLevel);
+    setIsTransitioning(true);
 
-    if (levelChanged) {
-      // Level changed - clear current questions and load new ones for the new level
-      console.log(`🔄 Level changed to ${nextLevel}, transitioning questions`);
-      setIsLevelTransitioning(true);
-      clearQuestions();
-      
-      try {
-        const newQuestions = await loadQuestionsForLevel(nextLevel, usedQuestionIds, 5);
-        if (newQuestions.length > 0) {
-          setCurrentQuestionIndex(0);
-        } else {
-          // Fallback: try to continue with current questions if new level has none
-          console.warn(`⚠️ No questions for level ${nextLevel}, staying with current questions`);
-          setCurrentQuestionIndex(prev => prev + 1);
-        }
-      } catch (error) {
-        console.error('Error loading questions for new level:', error);
-        setCurrentQuestionIndex(prev => prev + 1);
-      } finally {
-        setIsLevelTransitioning(false);
-      }
-    } else {
-      // Same level - ensure we have questions available and move to next
-      const canProceed = await ensureQuestionsAvailable(currentLevel);
-      if (canProceed) {
-        setCurrentQuestionIndex(prev => prev + 1);
-      } else {
-        // No more questions available, complete session early
-        console.log('🏁 No more questions available, completing session');
-        if (currentSession) {
-          await completeSession(currentSession.id);
-        }
-        await initializeSession();
+    try {
+      // Check if we must force a level change (3 questions rule)
+      const nextLevel = calculateNextLevel();
+      const levelWillChange = nextLevel !== currentLevel;
+      const mustChange = mustChangeLevel();
+
+      if (mustChange && !levelWillChange) {
+        console.error('🚨 SYSTEM ERROR: Must change level but algorithm didn\'t provide different level');
+        // Force the change anyway based on performance
+        const levelOrder = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+        const currentIndex = levelOrder.indexOf(currentLevel);
+        const fallbackLevel = currentIndex < levelOrder.length - 1 ? levelOrder[currentIndex + 1] : levelOrder[currentIndex - 1];
+        updateLevel(fallbackLevel);
+        await loadQuestionsAndContinue(fallbackLevel);
         return;
       }
-    }
 
-    // Reset answer state
+      if (levelWillChange) {
+        // Level is changing - load new questions for new level
+        console.log(`🔄 Level changing to ${nextLevel}, loading new questions`);
+        updateLevel(nextLevel);
+        await loadQuestionsAndContinue(nextLevel);
+      } else {
+        // Same level - ensure we have enough questions and continue
+        await ensureSufficientQuestionsAndContinue();
+      }
+    } catch (error) {
+      console.error('Error in nextQuestion:', error);
+      setIsTransitioning(false);
+    }
+  };
+
+  const loadQuestionsAndContinue = async (targetLevel: string) => {
+    console.log(`📥 Loading questions for level ${targetLevel}`);
+    
+    clearQuestions();
+    const newQuestions = await loadQuestionsForLevel(targetLevel, usedQuestionIds, 5);
+    
+    if (newQuestions.length === 0) {
+      console.error(`🚨 CRITICAL: No questions available for level ${targetLevel}`);
+      // This should not happen in a properly configured system
+      setIsTransitioning(false);
+      return;
+    }
+    
+    setCurrentQuestionIndex(0);
+    resetAnswerState();
+    setIsTransitioning(false);
+  };
+
+  const ensureSufficientQuestionsAndContinue = async () => {
+    const remainingQuestions = questions.length - currentQuestionIndex - 1;
+    
+    if (remainingQuestions < 1) {
+      console.log(`📥 Loading more questions for current level ${currentLevel}`);
+      const newQuestions = await loadQuestionsForLevel(currentLevel, usedQuestionIds, 5);
+      
+      if (newQuestions.length === 0) {
+        console.error(`🚨 CRITICAL: No more questions available for level ${currentLevel}`);
+        setIsTransitioning(false);
+        return;
+      }
+      
+      setCurrentQuestionIndex(0);
+    } else {
+      setCurrentQuestionIndex(prev => prev + 1);
+    }
+    
+    resetAnswerState();
+    setIsTransitioning(false);
+  };
+
+  const resetAnswerState = () => {
     setUserAnswer('');
     setSelectedOption('');
     setShowFeedback(false);
@@ -223,20 +232,20 @@ const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> 
     return <ErrorDisplay error={questionsError} onRetry={loadInitialQuestions} />;
   }
 
-  if ((isLoadingQuestions || isLevelTransitioning) && !currentQuestion) {
+  if ((isLoadingQuestions || isTransitioning) && !currentQuestion) {
     return <LoadingState message={`Loading questions for level ${currentLevel}...`} />;
   }
 
   if (!currentQuestion) {
     return (
-      <div className="text-center text-gray-500 p-4">
+      <div className="text-center text-red-500 p-4">
         <div className="space-y-4">
-          <AlertCircle className="h-16 w-16 mx-auto text-gray-400" />
+          <AlertTriangle className="h-16 w-16 mx-auto text-red-400" />
           <div>
-            <h3 className="text-lg font-semibold mb-2">No Questions Available</h3>
-            <p className="text-sm">No questions available for adaptive practice at level {currentLevel}.</p>
-            <Button onClick={loadInitialQuestions} className="mt-4">
-              Retry Loading Questions
+            <h3 className="text-lg font-semibold mb-2">System Error</h3>
+            <p className="text-sm">No questions available for level {currentLevel}. Assessment cannot continue.</p>
+            <Button onClick={loadInitialQuestions} className="mt-4" variant="destructive">
+              Restart Assessment
             </Button>
           </div>
         </div>
@@ -244,8 +253,8 @@ const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> 
     );
   }
 
-  const progress = (questionsAsked / maxQuestions) * 100;
-  const hasLevelMismatch = currentQuestion.level !== currentLevel;
+  const progress = (totalQuestionsAsked / REQUIRED_QUESTIONS) * 100;
+  const questionsRemaining = REQUIRED_QUESTIONS - totalQuestionsAsked;
 
   return (
     <div className="space-y-6">
@@ -254,7 +263,7 @@ const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> 
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center space-x-2">
               <Target className="h-5 w-5 text-blue-500" />
-              <span>Adaptive Practice - Question {questionsAsked + 1} of {maxQuestions}</span>
+              <span>Adaptive Assessment - Question {totalQuestionsAsked + 1} of {REQUIRED_QUESTIONS}</span>
             </CardTitle>
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2">
@@ -262,10 +271,7 @@ const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> 
                 <span className="text-sm text-purple-600 font-medium">
                   Level: {currentLevel}
                 </span>
-                {hasLevelMismatch && (
-                  <AlertCircle className="h-4 w-4 text-red-500" />
-                )}
-                {isLevelTransitioning && (
+                {isTransitioning && (
                   <div className="h-4 w-4 animate-spin rounded-full border-2 border-purple-500 border-t-transparent" />
                 )}
               </div>
@@ -293,13 +299,14 @@ const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> 
               </div>
               <div className="flex items-center space-x-2">
                 <span>Questions at {currentLevel}:</span>
-                <span className="font-medium">{questionsAtCurrentLevel}</span>
+                <span className="font-medium">{questionsAtCurrentLevel}/3</span>
                 {questionsAtCurrentLevel >= 3 && currentLevel !== 'A1' && currentLevel !== 'C2' && (
-                  <AlertCircle className="h-3 w-3 text-yellow-500" />
+                  <AlertTriangle className="h-3 w-3 text-orange-500" />
                 )}
               </div>
             </div>
             <div className="flex flex-col items-end space-y-1">
+              <span>Remaining: {questionsRemaining} questions</span>
               <span>Progression: {progression.join(' → ')}</span>
               {lastAnswerCorrect !== null && (
                 <div className="flex items-center space-x-1">
@@ -311,18 +318,13 @@ const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> 
                   )}
                 </div>
               )}
-              {hasLevelMismatch && (
-                <span className="text-xs text-red-600">
-                  Question: {currentQuestion.level} ≠ Target: {currentLevel}
-                </span>
-              )}
             </div>
           </div>
 
-          {(isLoadingQuestions || isLevelTransitioning) && (
+          {isTransitioning && (
             <div className="text-sm text-blue-600 mt-2 flex items-center space-x-2">
               <div className="h-3 w-3 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
-              <span>Loading questions for level {currentLevel}...</span>
+              <span>Transitioning to level {currentLevel}...</span>
             </div>
           )}
         </CardHeader>
@@ -345,7 +347,7 @@ const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> 
             selectedOption={selectedOption}
             onAnswerChange={setUserAnswer}
             onOptionChange={setSelectedOption}
-            disabled={showFeedback || isLevelTransitioning}
+            disabled={showFeedback || isTransitioning}
           />
 
           {showFeedback && feedback && (
@@ -356,7 +358,7 @@ const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> 
             {!showFeedback ? (
               <Button 
                 onClick={submitAnswer} 
-                disabled={(!userAnswer.trim() && !selectedOption) || isGettingFeedback || isLevelTransitioning}
+                disabled={(!userAnswer.trim() && !selectedOption) || isGettingFeedback || isTransitioning}
                 className="w-full"
               >
                 {isGettingFeedback ? 'Checking...' : 'Submit Answer'}
@@ -365,11 +367,11 @@ const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> 
               <Button 
                 onClick={nextQuestion}
                 className="w-full"
-                disabled={isLoadingQuestions || isLevelTransitioning}
+                disabled={isLoadingQuestions || isTransitioning}
               >
-                {questionsAsked + 1 >= maxQuestions 
-                  ? 'Complete Practice (15/15)' 
-                  : `Next Question (${questionsAsked + 1}/15)`}
+                {questionsRemaining <= 1 
+                  ? 'Complete Assessment (15/15)' 
+                  : `Next Question (${totalQuestionsAsked + 1}/15)`}
               </Button>
             )}
           </div>

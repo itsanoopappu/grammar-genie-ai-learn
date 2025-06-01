@@ -33,7 +33,7 @@ export const useAdaptiveQuestions = () => {
     setIsLoading(true);
     setError(null);
     
-    console.log(`🔄 Loading ${limit} questions for level: ${level}, excluding: ${excludeQuestionIds.length} questions`);
+    console.log(`🔄 Loading ${limit} questions for EXACT level: ${level}, excluding: ${excludeQuestionIds.length} questions`);
     
     try {
       const { data: newQuestions, error: questionsError } = await supabase
@@ -51,50 +51,20 @@ export const useAdaptiveQuestions = () => {
       }
 
       if (!newQuestions || newQuestions.length === 0) {
-        console.warn(`⚠️ No questions found for level ${level}`);
-        
-        // Try to get questions from adjacent levels as fallback
-        const levelOrder = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
-        const currentIndex = levelOrder.indexOf(level);
-        const adjacentLevels = [];
-        
-        if (currentIndex > 0) adjacentLevels.push(levelOrder[currentIndex - 1]);
-        if (currentIndex < levelOrder.length - 1) adjacentLevels.push(levelOrder[currentIndex + 1]);
-        
-        console.log(`🔄 Trying fallback levels: ${adjacentLevels.join(', ')}`);
-        
-        for (const fallbackLevel of adjacentLevels) {
-          const { data: fallbackQuestions } = await supabase
-            .rpc('get_adaptive_questions_for_user', {
-              p_user_id: user.id,
-              p_current_level: fallbackLevel,
-              p_limit: limit,
-              p_exclude_question_ids: excludeQuestionIds
-            });
-          
-          if (fallbackQuestions && fallbackQuestions.length > 0) {
-            console.log(`✅ Found ${fallbackQuestions.length} fallback questions from level ${fallbackLevel}`);
-            const transformedQuestions = fallbackQuestions.map((q: any) => ({
-              id: q.id,
-              question: q.question,
-              options: q.options,
-              correct_answer: q.correct_answer,
-              explanation: q.explanation,
-              level: q.level,
-              topic: q.topic,
-              difficulty_score: q.difficulty_score
-            }));
-            
-            setQuestions(transformedQuestions);
-            return transformedQuestions;
-          }
-        }
-        
-        setError(`No questions available for level ${level} or adjacent levels`);
+        console.error(`❌ NO QUESTIONS FOUND for level ${level} - System requires questions for each level`);
+        setError(`No questions available for level ${level}. Assessment cannot continue.`);
         return [];
       }
 
-      // Validate that questions match the requested level (or are from fallback)
+      // STRICT VALIDATION: All questions must match requested level
+      const levelMismatches = newQuestions.filter((q: any) => q.level !== level);
+      if (levelMismatches.length > 0) {
+        console.error(`❌ LEVEL MISMATCH DETECTED: ${levelMismatches.length} questions don't match level ${level}:`, 
+          levelMismatches.map((q: any) => `${q.id}: ${q.level}`));
+        setError(`Questions loaded don't match requested level ${level}`);
+        return [];
+      }
+
       const transformedQuestions = newQuestions.map((q: any) => ({
         id: q.id,
         question: q.question,
@@ -106,14 +76,7 @@ export const useAdaptiveQuestions = () => {
         difficulty_score: q.difficulty_score
       }));
 
-      console.log(`✅ Loaded ${transformedQuestions.length} questions for level ${level}`);
-      
-      // Log if any questions don't match the expected level
-      const levelMismatches = transformedQuestions.filter(q => q.level !== level);
-      if (levelMismatches.length > 0) {
-        console.warn(`⚠️ Found ${levelMismatches.length} questions with different levels than requested (${level}):`, 
-          levelMismatches.map(q => `${q.id}: ${q.level}`));
-      }
+      console.log(`✅ Loaded ${transformedQuestions.length} questions for level ${level} - ALL VERIFIED`);
 
       setQuestions(transformedQuestions);
       return transformedQuestions;
@@ -140,6 +103,10 @@ export const useAdaptiveQuestions = () => {
     setQuestions(prev => [...prev, ...newQuestions]);
   }, []);
 
+  const hasQuestionsForLevel = useCallback((level: string): boolean => {
+    return questions.some(q => q.level === level);
+  }, [questions]);
+
   return {
     questions,
     isLoading,
@@ -147,6 +114,7 @@ export const useAdaptiveQuestions = () => {
     loadQuestionsForLevel,
     clearQuestions,
     getQuestionByIndex,
-    addQuestions
+    addQuestions,
+    hasQuestionsForLevel
   };
 };
