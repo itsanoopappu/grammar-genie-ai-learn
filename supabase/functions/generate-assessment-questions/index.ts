@@ -48,7 +48,9 @@ Each question should have:
 
 Focus on these grammar topics: tenses, conditionals, passive voice, reported speech, modal verbs, articles, prepositions, relative clauses, sentence structure, word formation.
 
-Ensure questions test practical language use, not just theoretical knowledge.`
+Ensure questions test practical language use, not just theoretical knowledge.
+
+IMPORTANT: Return ONLY valid JSON without any markdown formatting or code blocks.`
             },
             {
               role: 'user',
@@ -86,7 +88,28 @@ Ensure questions test practical language use, not just theoretical knowledge.`
       }
 
       const aiData = await openAIResponse.json();
-      const questionsData = JSON.parse(aiData.choices[0].message.content);
+      let aiContent = aiData.choices[0].message.content;
+      
+      console.log('Raw AI response:', aiContent);
+      
+      // Clean the response to remove markdown code blocks if present
+      if (aiContent.includes('```json')) {
+        aiContent = aiContent.replace(/```json\n?/, '').replace(/\n?```$/, '');
+      }
+      
+      // Remove any leading/trailing whitespace
+      aiContent = aiContent.trim();
+      
+      console.log('Cleaned AI response:', aiContent);
+      
+      let questionsData;
+      try {
+        questionsData = JSON.parse(aiContent);
+      } catch (parseError) {
+        console.error('JSON parse error:', parseError);
+        console.error('Content that failed to parse:', aiContent);
+        throw new Error(`Failed to parse AI response as JSON: ${parseError.message}`);
+      }
       
       // Insert questions into database
       const { data: insertedQuestions, error: insertError } = await supabaseClient
