@@ -19,7 +19,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { action, count = 50, level = 'A2' } = await req.json()
+    const { action, count = 50, level = 'mixed' } = await req.json()
 
     if (action === 'generate_questions') {
       // Define the corrected JSON schema for structured outputs
@@ -89,21 +89,34 @@ serve(async (req) => {
         additionalProperties: false
       }
 
-      console.log('Generating questions with OpenAI Structured Outputs...')
+      console.log('Generating questions with balanced level distribution...')
 
-      // Generate questions using OpenAI with Structured Outputs
-      const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            {
-              role: 'system',
-              content: `You are an expert English language assessment creator. Generate high-quality English grammar and language assessment questions with comprehensive explanations using first principles.
+      // Calculate questions per level for balanced distribution
+      const levels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+      const questionsPerLevel = Math.floor(count / levels.length);
+      const remainingQuestions = count % levels.length;
+
+      let allQuestions: any[] = [];
+
+      // Generate questions for each level
+      for (let i = 0; i < levels.length; i++) {
+        const currentLevel = levels[i];
+        const questionsForThisLevel = questionsPerLevel + (i < remainingQuestions ? 1 : 0);
+        
+        console.log(`Generating ${questionsForThisLevel} questions for level ${currentLevel}`);
+
+        const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'gpt-4o-mini',
+            messages: [
+              {
+                role: 'system',
+                content: `You are an expert English language assessment creator. Generate high-quality English grammar and language assessment questions with comprehensive explanations using first principles.
 
 Each question should have:
 1. Clear, unambiguous question text
@@ -117,52 +130,55 @@ Each question should have:
 
 Focus on these grammar topics: tenses, conditionals, passive voice, reported speech, modal verbs, articles, prepositions, relative clauses, sentence structure, word formation.
 
-Ensure questions test practical language use, not just theoretical knowledge.`
+Ensure questions test practical language use, not just theoretical knowledge.
+
+IMPORTANT: ALL questions must be exactly ${currentLevel} level. Do not generate questions for other levels.`
+              },
+              {
+                role: 'user',
+                content: `Generate exactly ${questionsForThisLevel} English assessment questions for ${currentLevel} level ONLY. Each question must have exactly 4 options with one correct answer. All questions MUST be ${currentLevel} level difficulty.`
+              }
+            ],
+            response_format: {
+              type: "json_schema",
+              json_schema: {
+                name: "assessment_questions",
+                strict: true,
+                schema: questionsSchema
+              }
             },
-            {
-              role: 'user',
-              content: `Generate ${count} English assessment questions for ${level} level. Each question must have exactly 4 options with one correct answer.`
-            }
-          ],
-          response_format: {
-            type: "json_schema",
-            json_schema: {
-              name: "assessment_questions",
-              strict: true,
-              schema: questionsSchema
-            }
-          },
-          temperature: 0.3
-        })
-      });
+            temperature: 0.3
+          })
+        });
 
-      if (!openAIResponse.ok) {
-        const errorData = await openAIResponse.json();
-        console.error('OpenAI API error:', errorData);
-        throw new Error(`OpenAI API error: ${openAIResponse.statusText} - ${JSON.stringify(errorData)}`);
+        if (!openAIResponse.ok) {
+          const errorData = await openAIResponse.json();
+          console.error(`OpenAI API error for level ${currentLevel}:`, errorData);
+          throw new Error(`OpenAI API error for level ${currentLevel}: ${openAIResponse.statusText} - ${JSON.stringify(errorData)}`);
+        }
+
+        const aiData = await openAIResponse.json();
+        
+        if (aiData.choices[0].message.refusal) {
+          console.error(`OpenAI refused the request for level ${currentLevel}:`, aiData.choices[0].message.refusal);
+          throw new Error(`OpenAI refused the request for level ${currentLevel}: ${aiData.choices[0].message.refusal}`);
+        }
+
+        if (!aiData.choices[0].message.content) {
+          console.error(`No content received from OpenAI for level ${currentLevel}`);
+          throw new Error(`No content received from OpenAI for level ${currentLevel}`);
+        }
+
+        const questionsData = JSON.parse(aiData.choices[0].message.content);
+        allQuestions = allQuestions.concat(questionsData.questions);
+        
+        console.log(`Successfully generated ${questionsData.questions.length} questions for level ${currentLevel}`);
       }
-
-      const aiData = await openAIResponse.json();
-      console.log('OpenAI response received:', aiData);
       
-      // Handle potential refusals or errors
-      if (aiData.choices[0].message.refusal) {
-        console.error('OpenAI refused the request:', aiData.choices[0].message.refusal);
-        throw new Error(`OpenAI refused the request: ${aiData.choices[0].message.refusal}`);
-      }
-
-      if (!aiData.choices[0].message.content) {
-        console.error('No content received from OpenAI');
-        throw new Error('No content received from OpenAI');
-      }
-
-      // With structured outputs, the content is guaranteed to be valid JSON
-      const questionsData = JSON.parse(aiData.choices[0].message.content);
-      
-      console.log('Successfully parsed questions:', questionsData.questions.length);
+      console.log(`Total questions generated: ${allQuestions.length}`);
       
       // Transform wrong_answer_explanations from array to object format for database
-      const transformedQuestions = questionsData.questions.map((q: any) => {
+      const transformedQuestions = allQuestions.map((q: any) => {
         const wrongAnswerExplanationsObj: Record<string, string> = {};
         q.wrong_answer_explanations.forEach((item: any) => {
           wrongAnswerExplanationsObj[item.option] = item.explanation;
@@ -197,10 +213,18 @@ Ensure questions test practical language use, not just theoretical knowledge.`
 
       console.log('Successfully inserted questions into database:', insertedQuestions?.length);
 
+      // Log level distribution
+      const levelCounts = insertedQuestions?.reduce((acc: any, q: any) => {
+        acc[q.level] = (acc[q.level] || 0) + 1;
+        return acc;
+      }, {});
+      console.log('Level distribution:', levelCounts);
+
       return new Response(
         JSON.stringify({ 
           success: true,
-          questionsGenerated: questionsData.questions.length,
+          questionsGenerated: allQuestions.length,
+          levelDistribution: levelCounts,
           questions: insertedQuestions
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

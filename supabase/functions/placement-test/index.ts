@@ -29,7 +29,7 @@ serve(async (req) => {
           user_id,
           assessment_type: 'comprehensive',
           total_questions: 15,
-          immediate_feedback: true,
+          immediate_feedback: false, // Changed to false - no immediate feedback
           started_at: new Date().toISOString()
         })
         .select()
@@ -40,7 +40,7 @@ serve(async (req) => {
         throw new Error(`Failed to create test entry: ${testError.message}`);
       }
 
-      // Get unseen questions for user using the database function
+      // Get balanced questions across all levels using the database function
       const { data: questions, error: questionsError } = await supabaseClient
         .rpc('get_unseen_questions_for_user', {
           p_user_id: user_id,
@@ -56,6 +56,13 @@ serve(async (req) => {
         throw new Error('No available questions found. Please contact support.');
       }
 
+      // Ensure we have a good distribution across levels
+      const levelCounts = questions.reduce((acc: any, q: any) => {
+        acc[q.level] = (acc[q.level] || 0) + 1;
+        return acc;
+      }, {});
+      console.log('Selected questions level distribution:', levelCounts);
+
       // Create test questions entries
       const { error: testQuestionsError } = await supabaseClient
         .from('test_questions')
@@ -70,27 +77,15 @@ serve(async (req) => {
         JSON.stringify({ 
           testId: testData.id,
           questions: questions.slice(0, 15), // Ensure exactly 15 questions
-          estimatedTime: 20
+          estimatedTime: 20,
+          levelDistribution: levelCounts
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
     if (action === 'submit_answer') {
-      // Get question details for feedback
-      const { data: question, error: questionError } = await supabaseClient
-        .from('test_questions')
-        .select('*')
-        .eq('id', question_id)
-        .single()
-
-      if (questionError) {
-        throw new Error(`Failed to fetch question: ${questionError.message}`);
-      }
-
-      const isCorrect = user_answer.toLowerCase().trim() === question.correct_answer.toLowerCase().trim();
-      
-      // Record that user has seen this question
+      // Record that user has seen this question (no immediate feedback)
       const { error: historyError } = await supabaseClient
         .from('user_question_history')
         .insert({
@@ -104,20 +99,9 @@ serve(async (req) => {
         console.error('Question history error:', historyError);
       }
 
-      // Prepare feedback response
-      const feedback = {
-        isCorrect,
-        correctAnswer: question.correct_answer,
-        explanation: question.explanation,
-        detailedExplanation: question.detailed_explanation,
-        firstPrinciplesExplanation: question.first_principles_explanation,
-        wrongAnswerExplanations: question.wrong_answer_explanations,
-        topic: question.topic,
-        level: question.level
-      };
-
+      // Simply acknowledge answer submission without feedback
       return new Response(
-        JSON.stringify(feedback),
+        JSON.stringify({ success: true, message: 'Answer recorded' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
@@ -136,6 +120,7 @@ serve(async (req) => {
       let totalScore = 0;
       let levelScores = { A1: 0, A2: 0, B1: 0, B2: 0, C1: 0, C2: 0 };
       let topicPerformance: Record<string, { correct: number; total: number }> = {};
+      let detailedFeedback: any[] = [];
       
       questions.forEach((q: any) => {
         const userAnswer = answers[q.id] || '';
@@ -153,6 +138,20 @@ serve(async (req) => {
         if (isCorrect) {
           topicPerformance[q.topic].correct++;
         }
+
+        // Store detailed feedback for post-assessment review
+        detailedFeedback.push({
+          question: q.question,
+          userAnswer,
+          correctAnswer: q.correct_answer,
+          isCorrect,
+          explanation: q.explanation,
+          detailedExplanation: q.detailed_explanation,
+          firstPrinciplesExplanation: q.first_principles_explanation,
+          wrongAnswerExplanations: q.wrong_answer_explanations,
+          topic: q.topic,
+          level: q.level
+        });
       });
 
       const percentage = (totalScore / questions.length) * 100;
@@ -213,7 +212,8 @@ serve(async (req) => {
             levelScores,
             topicPerformance,
             totalQuestions: questions.length,
-            totalCorrect: totalScore
+            totalCorrect: totalScore,
+            detailedFeedback
           },
           next_steps: [
             `Focus on ${weaknesses.slice(0, 3).join(', ') || 'advanced concepts'} for improvement`,
@@ -237,7 +237,8 @@ serve(async (req) => {
               `Your strongest areas: ${strengths.slice(0, 3).join(', ') || 'Building foundation skills'}`,
               `Focus areas for improvement: ${weaknesses.slice(0, 3).join(', ') || 'Continue current level practice'}`,
               'Use Smart Practice for targeted skill development'
-            ]
+            ],
+            questionReview: detailedFeedback
           }
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

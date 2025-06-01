@@ -19,17 +19,6 @@ interface Question {
   difficulty_score?: number;
 }
 
-interface QuestionFeedback {
-  isCorrect: boolean;
-  correctAnswer: string;
-  explanation: string;
-  detailedExplanation?: string;
-  firstPrinciplesExplanation?: string;
-  wrongAnswerExplanations?: Record<string, string>;
-  topic: string;
-  level: string;
-}
-
 interface TestResults {
   score: number;
   total?: number;
@@ -42,6 +31,7 @@ interface TestResults {
   detailedFeedback: {
     message: string;
     nextSteps: string[];
+    questionReview?: any[];
   };
 }
 
@@ -52,15 +42,12 @@ interface TestState {
   selectedAnswer: string;
   questions: Question[];
   userAnswers: Record<string, string>;
-  questionFeedbacks: Record<string, QuestionFeedback>;
   testCompleted: boolean;
   testResults: TestResults | null;
   loading: boolean;
   error: string | null;
   timeSpent: number;
   startTime: Date | null;
-  showingFeedback: boolean;
-  currentFeedback: QuestionFeedback | null;
 }
 
 const initialState: TestState = {
@@ -70,15 +57,12 @@ const initialState: TestState = {
   selectedAnswer: '',
   questions: [],
   userAnswers: {},
-  questionFeedbacks: {},
   testCompleted: false,
   testResults: null,
   loading: false,
   error: null,
   timeSpent: 0,
-  startTime: null,
-  showingFeedback: false,
-  currentFeedback: null
+  startTime: null
 };
 
 const testStateAtom = atom<TestState>(initialState);
@@ -110,12 +94,9 @@ export const usePlacementTestLogic = () => {
         state.testStarted = true;
         state.currentQuestion = 0;
         state.userAnswers = {};
-        state.questionFeedbacks = {};
         state.testCompleted = false;
         state.startTime = new Date();
         state.timeSpent = 0;
-        state.showingFeedback = false;
-        state.currentFeedback = null;
         state.loading = false;
       }));
     } catch (error: any) {
@@ -136,8 +117,8 @@ export const usePlacementTestLogic = () => {
     try {
       const currentQuestion = state.questions[state.currentQuestion];
       
-      // Submit answer and get immediate feedback
-      const { data: feedback, error } = await supabase.functions.invoke('placement-test', {
+      // Submit answer without getting immediate feedback
+      const { error } = await supabase.functions.invoke('placement-test', {
         body: { 
           action: 'submit_answer',
           user_id: user?.id,
@@ -151,9 +132,6 @@ export const usePlacementTestLogic = () => {
 
       setState(produce(state => {
         state.userAnswers[currentQuestion.id] = state.selectedAnswer;
-        state.questionFeedbacks[currentQuestion.id] = feedback;
-        state.currentFeedback = feedback;
-        state.showingFeedback = true;
         state.loading = false;
         state.selectedAnswer = '';
       }));
@@ -170,8 +148,6 @@ export const usePlacementTestLogic = () => {
     if (state.currentQuestion < state.questions.length - 1) {
       setState(produce(state => {
         state.currentQuestion += 1;
-        state.showingFeedback = false;
-        state.currentFeedback = null;
       }));
     } else {
       completeTest();
