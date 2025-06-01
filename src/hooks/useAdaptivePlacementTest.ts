@@ -25,6 +25,8 @@ interface AdaptiveTestState {
   weightedScore: number;
   questionsAsked: number;
   maxQuestions: number;
+  usedGrammarTopics: string[];
+  grammarPerformance: Record<string, { correct: number; total: number; accuracy: number }>;
 }
 
 const initialState: AdaptiveTestState = {
@@ -39,13 +41,15 @@ const initialState: AdaptiveTestState = {
   loading: false,
   error: null,
   startTime: null,
-  currentDifficultyLevel: 'B1', // Start at B1 level
+  currentDifficultyLevel: 'B1',
   consecutiveCorrect: 0,
   consecutiveWrong: 0,
   adaptiveProgression: [],
   weightedScore: 0,
   questionsAsked: 0,
-  maxQuestions: 15
+  maxQuestions: 15,
+  usedGrammarTopics: [],
+  grammarPerformance: {}
 };
 
 const adaptiveTestStateAtom = atom<AdaptiveTestState>(initialState);
@@ -80,19 +84,34 @@ export const useAdaptivePlacementTest = () => {
 
       if (testError) throw testError;
 
-      // Get initial questions using adaptive function
+      // Get initial questions using new grammar exclusion function
       const { data: initialQuestions, error: questionsError } = await supabase
-        .rpc('get_adaptive_questions_for_user', {
+        .rpc('get_adaptive_questions_with_grammar_exclusion', {
           p_user_id: user?.id,
           p_current_level: 'B1',
           p_limit: 3,
-          p_exclude_question_ids: []
+          p_exclude_question_ids: [],
+          p_test_id: testData.id,
+          p_exclude_grammar_topics: []
         });
 
       if (questionsError) throw questionsError;
 
       if (!initialQuestions || initialQuestions.length === 0) {
         throw new Error('No questions available for adaptive assessment');
+      }
+
+      // Track grammar topics used
+      for (const question of initialQuestions) {
+        if (question.grammar_topic) {
+          await supabase
+            .from('test_grammar_usage')
+            .insert({
+              test_id: testData.id,
+              grammar_topic: question.grammar_topic,
+              grammar_category: question.grammar_category || 'unknown'
+            });
+        }
       }
 
       setState(produce(state => {
@@ -106,6 +125,8 @@ export const useAdaptivePlacementTest = () => {
         state.currentDifficultyLevel = 'B1';
         state.adaptiveProgression = ['B1'];
         state.questionsAsked = 0;
+        state.usedGrammarTopics = initialQuestions.map(q => q.grammar_topic).filter(Boolean);
+        state.grammarPerformance = {};
         state.loading = false;
       }));
     } catch (error: any) {
@@ -141,6 +162,17 @@ export const useAdaptivePlacementTest = () => {
       const levelWeights = weights[level as keyof typeof weights] || weights['B1'];
       const pointsEarned = isCorrect ? levelWeights.correct : levelWeights.incorrect;
 
+      // Update grammar performance tracking
+      if (currentQuestion.grammar_category && currentQuestion.grammar_topic) {
+        await supabase.rpc('update_user_grammar_performance', {
+          p_user_id: user?.id,
+          p_grammar_category: currentQuestion.grammar_category,
+          p_grammar_topic: currentQuestion.grammar_topic,
+          p_level: currentQuestion.level,
+          p_is_correct: isCorrect
+        });
+      }
+
       // Record answer with enhanced tracking
       const { error: historyError } = await supabase
         .from('user_question_history')
@@ -166,6 +198,18 @@ export const useAdaptivePlacementTest = () => {
         state.userAnswers[currentQuestion.id] = state.selectedAnswer;
         state.weightedScore += pointsEarned;
         state.questionsAsked += 1;
+        
+        // Update grammar performance tracking
+        const grammarCategory = currentQuestion.grammar_category || 'unknown';
+        if (!state.grammarPerformance[grammarCategory]) {
+          state.grammarPerformance[grammarCategory] = { correct: 0, total: 0, accuracy: 0 };
+        }
+        state.grammarPerformance[grammarCategory].total += 1;
+        if (isCorrect) {
+          state.grammarPerformance[grammarCategory].correct += 1;
+        }
+        state.grammarPerformance[grammarCategory].accuracy = 
+          state.grammarPerformance[grammarCategory].correct / state.grammarPerformance[grammarCategory].total;
         
         // Update consecutive counters
         if (isCorrect) {
@@ -215,13 +259,15 @@ export const useAdaptivePlacementTest = () => {
       // Get already asked question IDs
       const askedQuestionIds = state.questions.slice(0, state.currentQuestionIndex + 1).map(q => q.id);
 
-      // Get next adaptive questions
+      // Get next adaptive questions with grammar exclusion
       const { data: nextQuestions, error: questionsError } = await supabase
-        .rpc('get_adaptive_questions_for_user', {
+        .rpc('get_adaptive_questions_with_grammar_exclusion', {
           p_user_id: user?.id,
           p_current_level: state.currentDifficultyLevel,
           p_limit: 2,
-          p_exclude_question_ids: askedQuestionIds
+          p_exclude_question_ids: askedQuestionIds,
+          p_test_id: state.testId,
+          p_exclude_grammar_topics: state.usedGrammarTopics
         });
 
       if (questionsError) throw questionsError;
@@ -232,10 +278,27 @@ export const useAdaptivePlacementTest = () => {
         return;
       }
 
+      // Track new grammar topics
+      for (const question of nextQuestions) {
+        if (question.grammar_topic && !state.usedGrammarTopics.includes(question.grammar_topic)) {
+          await supabase
+            .from('test_grammar_usage')
+            .insert({
+              test_id: state.testId,
+              grammar_topic: question.grammar_topic,
+              grammar_category: question.grammar_category || 'unknown'
+            });
+        }
+      }
+
       setState(produce(state => {
         // Add new questions to the pool
         state.questions = [...state.questions, ...nextQuestions];
         state.currentQuestionIndex += 1;
+        state.usedGrammarTopics = [
+          ...state.usedGrammarTopics,
+          ...nextQuestions.map(q => q.grammar_topic).filter(Boolean)
+        ];
         state.loading = false;
       }));
 
@@ -275,6 +338,23 @@ export const useAdaptivePlacementTest = () => {
 
       const percentageScore = Math.max(0, (weightedScore / totalPossibleScore) * 100);
 
+      // Save assessment grammar insights
+      for (const [category, performance] of Object.entries(state.grammarPerformance)) {
+        await supabase
+          .from('assessment_grammar_insights')
+          .insert({
+            user_id: user?.id,
+            test_id: state.testId,
+            grammar_category: category,
+            grammar_topic: category, // Simplified for now
+            level: recommendedLevel,
+            question_count: performance.total,
+            correct_count: performance.correct,
+            mistake_patterns: performance.accuracy < 0.5 ? [`Low accuracy in ${category}`] : [],
+            improvement_areas: performance.accuracy < 0.7 ? [`Practice more ${category} exercises`] : []
+          });
+      }
+
       // Calculate XP with weighted bonus
       const baseXP = 150;
       const levelMultiplier = {
@@ -300,7 +380,7 @@ export const useAdaptivePlacementTest = () => {
         console.error('Test update error:', updateError);
       }
 
-      // Create detailed results
+      // Create detailed results with grammar breakdown
       const testResults = {
         score: percentageScore,
         weightedScore,
@@ -309,12 +389,14 @@ export const useAdaptivePlacementTest = () => {
         totalQuestions: state.questionsAsked,
         adaptiveProgression: state.adaptiveProgression,
         levelBreakdown,
+        grammarBreakdown: state.grammarPerformance,
         xpEarned: totalXP,
         detailedFeedback: {
           message: `Adaptive assessment complete! Weighted score: ${Math.round(weightedScore)}/${Math.round(totalPossibleScore)} points (${Math.round(confidence)}% confidence)`,
           nextSteps: [
             `Your adaptive level: ${recommendedLevel} (${Math.round(confidence)}% confidence)`,
             `Questions adapted from ${state.adaptiveProgression.join(' → ')}`,
+            `Grammar variety: ${state.usedGrammarTopics.length} unique topics covered`,
             `Weighted scoring applied: easier mistakes penalized more heavily`
           ]
         }

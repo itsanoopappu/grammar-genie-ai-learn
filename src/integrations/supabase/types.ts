@@ -36,6 +36,56 @@ export type Database = {
         }
         Relationships: []
       }
+      assessment_grammar_insights: {
+        Row: {
+          correct_count: number
+          created_at: string | null
+          grammar_category: string
+          grammar_topic: string
+          id: string
+          improvement_areas: Json | null
+          level: string
+          mistake_patterns: Json | null
+          question_count: number
+          test_id: string | null
+          user_id: string
+        }
+        Insert: {
+          correct_count?: number
+          created_at?: string | null
+          grammar_category: string
+          grammar_topic: string
+          id?: string
+          improvement_areas?: Json | null
+          level: string
+          mistake_patterns?: Json | null
+          question_count?: number
+          test_id?: string | null
+          user_id: string
+        }
+        Update: {
+          correct_count?: number
+          created_at?: string | null
+          grammar_category?: string
+          grammar_topic?: string
+          id?: string
+          improvement_areas?: Json | null
+          level?: string
+          mistake_patterns?: Json | null
+          question_count?: number
+          test_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assessment_grammar_insights_test_id_fkey"
+            columns: ["test_id"]
+            isOneToOne: false
+            referencedRelation: "placement_tests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       assessment_results: {
         Row: {
           assessment_type: string
@@ -601,6 +651,38 @@ export type Database = {
         }
         Relationships: []
       }
+      test_grammar_usage: {
+        Row: {
+          grammar_category: string
+          grammar_topic: string
+          id: string
+          test_id: string | null
+          used_at: string | null
+        }
+        Insert: {
+          grammar_category: string
+          grammar_topic: string
+          id?: string
+          test_id?: string | null
+          used_at?: string | null
+        }
+        Update: {
+          grammar_category?: string
+          grammar_topic?: string
+          id?: string
+          test_id?: string | null
+          used_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "test_grammar_usage_test_id_fkey"
+            columns: ["test_id"]
+            isOneToOne: false
+            referencedRelation: "placement_tests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       test_questions: {
         Row: {
           correct_answer: string
@@ -740,6 +822,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_grammar_performance: {
+        Row: {
+          accuracy_rate: number
+          correct_count: number
+          created_at: string | null
+          grammar_category: string
+          grammar_topic: string
+          id: string
+          incorrect_count: number
+          last_practiced: string | null
+          level: string
+          proficiency_score: number
+          total_attempts: number
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          accuracy_rate?: number
+          correct_count?: number
+          created_at?: string | null
+          grammar_category: string
+          grammar_topic: string
+          id?: string
+          incorrect_count?: number
+          last_practiced?: string | null
+          level: string
+          proficiency_score?: number
+          total_attempts?: number
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          accuracy_rate?: number
+          correct_count?: number
+          created_at?: string | null
+          grammar_category?: string
+          grammar_topic?: string
+          id?: string
+          incorrect_count?: number
+          last_practiced?: string | null
+          level?: string
+          proficiency_score?: number
+          total_attempts?: number
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       user_memory: {
         Row: {
@@ -941,6 +1071,32 @@ export type Database = {
           difficulty_score: number
         }[]
       }
+      get_adaptive_questions_with_grammar_exclusion: {
+        Args: {
+          p_user_id: string
+          p_current_level?: string
+          p_limit?: number
+          p_exclude_question_ids?: string[]
+          p_test_id?: string
+          p_exclude_grammar_topics?: string[]
+        }
+        Returns: {
+          id: string
+          question: string
+          options: Json
+          correct_answer: string
+          topic: string
+          level: string
+          explanation: string
+          detailed_explanation: string
+          first_principles_explanation: string
+          wrong_answer_explanations: Json
+          difficulty_score: number
+          grammar_topic: string
+          grammar_category: string
+          subject_category: string
+        }[]
+      }
       get_unseen_questions_for_user: {
         Args: { p_user_id: string; p_limit?: number }
         Returns: {
@@ -956,6 +1112,16 @@ export type Database = {
           wrong_answer_explanations: Json
           difficulty_score: number
         }[]
+      }
+      update_user_grammar_performance: {
+        Args: {
+          p_user_id: string
+          p_grammar_category: string
+          p_grammar_topic: string
+          p_level: string
+          p_is_correct: boolean
+        }
+        Returns: undefined
       }
     }
     Enums: {

@@ -33,6 +33,7 @@ const PlacementTest = () => {
   const testProgress = state.testStarted ? (getCurrentQuestionIndex() + 1) / Math.max(state.questions.length, 1) * 100 : 0;
   const timeElapsed = state.startTime ? Math.floor((Date.now() - state.startTime.getTime()) / 1000 / 60) : 0;
   const currentQuestionIndex = getCurrentQuestionIndex();
+  const currentQuestion = state.questions[currentQuestionIndex];
 
   const handleStartTest = async () => {
     if (assessmentMode === 'adaptive') {
@@ -50,6 +51,10 @@ const PlacementTest = () => {
       await submitComprehensiveAnswer();
       nextComprehensiveQuestion();
     }
+  };
+
+  const handleAnswer = (answer: string) => {
+    setSelectedAnswer(answer);
   };
 
   const handleGenerateQuestions = async () => {
@@ -101,7 +106,7 @@ const PlacementTest = () => {
             )}
           </div>
           <h3 className="text-lg font-medium text-gray-900 mb-2">
-            Question {currentQuestionIndex + 1} of {questions.length}
+            Question {currentQuestionIndex + 1} of {state.questions.length}
           </h3>
           <p className="text-gray-700 leading-relaxed">{currentQuestion.question}</p>
         </div>
@@ -112,9 +117,9 @@ const PlacementTest = () => {
             <button
               key={index}
               onClick={() => handleAnswer(option)}
-              disabled={isSubmittingAnswer}
+              disabled={state.loading}
               className={`w-full p-4 text-left border rounded-lg transition-all hover:border-blue-300 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed ${
-                selectedAnswer === option
+                state.selectedAnswer === option
                   ? 'border-blue-500 bg-blue-50 text-blue-900'
                   : 'border-gray-200 bg-white text-gray-700'
               }`}
@@ -129,12 +134,12 @@ const PlacementTest = () => {
         <div className="mt-6">
           <div className="flex justify-between text-sm text-gray-600 mb-2">
             <span>Progress</span>
-            <span>{Math.round(((currentQuestionIndex + 1) / questions.length) * 100)}%</span>
+            <span>{Math.round(((currentQuestionIndex + 1) / state.questions.length) * 100)}%</span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
             <div
               className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${((currentQuestionIndex + 1) / questions.length) * 100}%` }}
+              style={{ width: `${((currentQuestionIndex + 1) / state.questions.length) * 100}%` }}
             />
           </div>
         </div>
@@ -240,6 +245,46 @@ const PlacementTest = () => {
                           {points > 0 ? '+' : ''}{Math.round(points)} pts
                         </div>
                       )}
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Grammar Performance Breakdown */}
+        {state.testResults.grammarBreakdown && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <Brain className="h-5 w-5 text-purple-500" />
+                <span>Grammar Performance Analysis</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {Object.entries(state.testResults.grammarBreakdown).map(([category, data]) => {
+                  const categoryData = data as { correct: number; total: number; accuracy: number };
+                  return (
+                    <div key={category} className="p-4 rounded-lg border bg-gradient-to-r from-purple-50 to-indigo-50">
+                      <div className="flex justify-between items-center mb-2">
+                        <h4 className="font-semibold text-gray-800">{category}</h4>
+                        <Badge variant="outline" className={categoryData.accuracy >= 0.7 ? "border-green-500 text-green-700" : "border-red-500 text-red-700"}>
+                          {Math.round(categoryData.accuracy * 100)}%
+                        </Badge>
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        {categoryData.correct}/{categoryData.total} correct
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+                        <div
+                          className={`h-2 rounded-full transition-all duration-300 ${
+                            categoryData.accuracy >= 0.7 ? 'bg-green-500' : 'bg-red-500'
+                          }`}
+                          style={{ width: `${categoryData.accuracy * 100}%` }}
+                        />
+                      </div>
                     </div>
                   );
                 })}
@@ -440,7 +485,7 @@ const PlacementTest = () => {
                       <li>• Weighted scoring (A1: +1/-2.5, C2: +8/+0.5)</li>
                       <li>• Adapts difficulty based on performance</li>
                       <li>• Starts at B1, adjusts intelligently</li>
-                      <li>• No duplicate questions</li>
+                      <li>• No duplicate grammar topics</li>
                       <li>• Severe penalties for basic mistakes</li>
                     </ul>
                   </CardContent>
@@ -604,34 +649,7 @@ const PlacementTest = () => {
               {/* Question Display */}
               <Card className={assessmentMode === 'adaptive' ? "bg-gradient-to-r from-purple-50 to-indigo-50" : "bg-gradient-to-r from-blue-50 to-indigo-50"}>
                 <CardContent className="p-6">
-                  <div className="mb-4">
-                    <div className="flex items-center space-x-2 mb-3">
-                      {state.questions[currentQuestionIndex]?.level && (
-                        <Badge variant="secondary">
-                          Level: {state.questions[currentQuestionIndex].level}
-                        </Badge>
-                      )}
-                      {state.questions[currentQuestionIndex]?.topic && (
-                        <Badge variant="outline">
-                          {state.questions[currentQuestionIndex].topic}
-                        </Badge>
-                      )}
-                    </div>
-                    <h4 className="text-xl font-medium text-gray-800">
-                      {state.questions[currentQuestionIndex]?.question}
-                    </h4>
-                  </div>
-
-                  <RadioGroup value={state.selectedAnswer} onValueChange={setSelectedAnswer} className="space-y-3">
-                    {state.questions[currentQuestionIndex]?.options?.map((option) => (
-                      <div key={option} className="flex items-center space-x-3 p-3 rounded-lg hover:bg-white/60 transition-colors">
-                        <RadioGroupItem value={option} id={option} />
-                        <Label htmlFor={option} className="cursor-pointer text-base flex-1">
-                          {option}
-                        </Label>
-                      </div>
-                    ))}
-                  </RadioGroup>
+                  {renderQuestion()}
 
                   <div className="mt-6 flex justify-end">
                     <Button 
