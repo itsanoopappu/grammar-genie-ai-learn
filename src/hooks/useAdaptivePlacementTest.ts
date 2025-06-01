@@ -83,7 +83,7 @@ export const useAdaptivePlacementTest = () => {
 
       if (testError) throw testError;
 
-      // Pre-load all 15 questions with unique grammar topics
+      // Load exactly 15 questions with unique grammar topics
       const allQuestions = await loadAdaptiveQuestionPool(testData.id);
       
       if (allQuestions.length < 15) {
@@ -106,6 +106,7 @@ export const useAdaptivePlacementTest = () => {
         state.loading = false;
       }));
     } catch (error: any) {
+      console.error('Failed to start adaptive assessment:', error);
       setState(produce(state => { 
         state.loading = false;
         state.error = error.message || 'Failed to start adaptive assessment';
@@ -114,8 +115,10 @@ export const useAdaptivePlacementTest = () => {
   };
 
   const loadAdaptiveQuestionPool = async (testId: string) => {
-    // Get questions with complete grammar metadata only
-    const { data: availableQuestions, error: questionsError } = await supabase
+    console.log('🔍 Starting adaptive question pool loading...');
+    
+    // Get all questions with COMPLETE grammar metadata only
+    const { data: allQuestions, error: questionsError } = await supabase
       .from('test_questions')
       .select('*')
       .not('question', 'is', null)
@@ -124,16 +127,20 @@ export const useAdaptivePlacementTest = () => {
       .not('grammar_topic', 'is', null)
       .not('grammar_category', 'is', null);
 
-    if (questionsError) throw questionsError;
+    if (questionsError) {
+      console.error('❌ Error fetching questions:', questionsError);
+      throw questionsError;
+    }
 
-    if (!availableQuestions || availableQuestions.length === 0) {
+    if (!allQuestions || allQuestions.length === 0) {
+      console.error('❌ No questions found in database');
       throw new Error('No questions available in database');
     }
 
-    console.log(`Found ${availableQuestions.length} questions with complete grammar metadata`);
+    console.log(`✅ Found ${allQuestions.length} questions with complete grammar metadata`);
 
     // Filter out recently seen questions (last 30 days)
-    let questionPool = availableQuestions;
+    let questionPool = allQuestions;
     if (user) {
       const { data: seenQuestions } = await supabase
         .from('user_question_history')
@@ -142,10 +149,11 @@ export const useAdaptivePlacementTest = () => {
         .gte('seen_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
 
       const seenQuestionIds = new Set(seenQuestions?.map(sq => sq.question_id) || []);
-      questionPool = availableQuestions.filter(q => !seenQuestionIds.has(q.id));
+      questionPool = allQuestions.filter(q => !seenQuestionIds.has(q.id));
+      console.log(`📋 Filtered to ${questionPool.length} unseen questions (${seenQuestionIds.size} seen in last 30 days)`);
     }
 
-    // Group by unique grammar topics and select exactly 15
+    // Group by unique grammar topics - PRIORITY: Get 15 unique topics first
     const grammarTopicMap = new Map<string, any[]>();
     questionPool.forEach(question => {
       const grammarTopic = question.grammar_topic;
@@ -157,69 +165,80 @@ export const useAdaptivePlacementTest = () => {
       }
     });
 
-    // Ensure we have at least 15 unique grammar topics
     const availableTopics = Array.from(grammarTopicMap.keys());
+    console.log(`🎯 Found ${availableTopics.length} unique grammar topics available`);
+
     if (availableTopics.length < 15) {
+      console.error(`❌ Insufficient unique grammar topics. Need 15, found ${availableTopics.length}`);
       throw new Error(`Insufficient unique grammar topics. Found ${availableTopics.length}, need 15.`);
     }
 
-    // Select exactly 15 unique grammar topics, prioritizing variety across levels
+    // NEW APPROACH: Select 15 unique grammar topics first, then pick best questions
     const selectedQuestions: any[] = [];
     const usedGrammarTopics = new Set<string>();
     
-    // Prioritize level distribution for adaptive questioning
-    const levelPriority = ['B1', 'B2', 'A2', 'C1', 'A1', 'C2'];
+    // Step 1: Shuffle topics for randomization
+    const shuffledTopics = [...availableTopics].sort(() => Math.random() - 0.5);
     
-    for (const level of levelPriority) {
+    // Step 2: For each topic, select the best question (prefer current level, then adjacent)
+    for (const topic of shuffledTopics) {
       if (selectedQuestions.length >= 15) break;
       
-      // Get topics that have questions at this level
-      for (const [topic, questions] of grammarTopicMap.entries()) {
-        if (selectedQuestions.length >= 15) break;
-        if (usedGrammarTopics.has(topic)) continue;
+      const topicQuestions = grammarTopicMap.get(topic)!;
+      
+      // Sort questions by level preference: B1 first, then adjacent levels
+      const sortedQuestions = topicQuestions.sort((a, b) => {
+        const levelOrder = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+        const aIndex = levelOrder.indexOf(a.level);
+        const bIndex = levelOrder.indexOf(b.level);
         
-        const levelQuestions = questions.filter(q => q.level === level);
-        if (levelQuestions.length > 0) {
-          // Pick a random question from this topic at this level
-          const randomQuestion = levelQuestions[Math.floor(Math.random() * levelQuestions.length)];
-          selectedQuestions.push(randomQuestion);
-          usedGrammarTopics.add(topic);
-          
-          // Track grammar usage for this test
-          await supabase
-            .from('test_grammar_usage')
-            .insert({
-              test_id: testId,
-              grammar_topic: randomQuestion.grammar_topic,
-              grammar_category: randomQuestion.grammar_category || 'unknown'
-            });
-        }
-      }
+        // Prefer B1 first
+        if (a.level === 'B1' && b.level !== 'B1') return -1;
+        if (b.level === 'B1' && a.level !== 'B1') return 1;
+        
+        // Then prefer adjacent levels to B1 (A2, B2)
+        const b1Index = levelOrder.indexOf('B1');
+        const aDistance = Math.abs(aIndex - b1Index);
+        const bDistance = Math.abs(bIndex - b1Index);
+        
+        if (aDistance !== bDistance) return aDistance - bDistance;
+        
+        // Finally, random selection within same priority
+        return Math.random() - 0.5;
+      });
+      
+      // Select the best question for this topic
+      const selectedQuestion = sortedQuestions[0];
+      selectedQuestions.push(selectedQuestion);
+      usedGrammarTopics.add(topic);
+      
+      console.log(`✅ Selected topic "${topic}" with level ${selectedQuestion.level}`);
+      
+      // Track grammar usage for this test
+      await supabase
+        .from('test_grammar_usage')
+        .insert({
+          test_id: testId,
+          grammar_topic: selectedQuestion.grammar_topic,
+          grammar_category: selectedQuestion.grammar_category || 'unknown'
+        });
     }
 
-    // Fill remaining slots with any unused topics
-    if (selectedQuestions.length < 15) {
-      for (const [topic, questions] of grammarTopicMap.entries()) {
-        if (selectedQuestions.length >= 15) break;
-        if (usedGrammarTopics.has(topic)) continue;
-        
-        const randomQuestion = questions[Math.floor(Math.random() * questions.length)];
-        selectedQuestions.push(randomQuestion);
-        usedGrammarTopics.add(topic);
-        
-        await supabase
-          .from('test_grammar_usage')
-          .insert({
-            test_id: testId,
-            grammar_topic: randomQuestion.grammar_topic,
-            grammar_category: randomQuestion.grammar_category || 'unknown'
-          });
-      }
-    }
+    // Step 3: Final shuffle of selected questions for random order
+    const finalQuestions = selectedQuestions.sort(() => Math.random() - 0.5);
 
-    console.log(`✅ Selected exactly ${selectedQuestions.length} questions with ${usedGrammarTopics.size} unique grammar topics`);
+    // Log final distribution
+    const levelDistribution = finalQuestions.reduce((acc: any, q: any) => {
+      acc[q.level] = (acc[q.level] || 0) + 1;
+      return acc;
+    }, {});
     
-    return selectedQuestions.slice(0, 15); // Ensure exactly 15 questions
+    console.log('🎉 Final selection completed:');
+    console.log(`📊 Level distribution:`, levelDistribution);
+    console.log(`🔤 Grammar topics selected: ${usedGrammarTopics.size}`);
+    console.log(`📝 Total questions: ${finalQuestions.length}`);
+    
+    return finalQuestions.slice(0, 15); // Ensure exactly 15 questions
   };
 
   const submitAdaptiveAnswer = async () => {
