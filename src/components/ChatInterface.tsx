@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,12 +9,11 @@ import { MessageCircle, Send, Mic, MicOff, Volume2, Bot, User, Lightbulb, CheckC
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
-import { useChatContext } from '@/contexts/ChatContext';
 
 interface Message {
   id: string;
   content: string;
-  sender: 'user' | 'ai';
+  sender: 'user' | 'ai';  // Updated to match database enum
   timestamp: Date;
   corrections?: Array<{
     original: string;
@@ -28,11 +28,6 @@ interface Message {
 const ChatInterface = () => {
   const { user } = useAuth();
   const { profile, updateProfile } = useProfile();
-  const { 
-    chatDisabled,
-    setAiResponse
-  } = useChatContext();
-
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -87,6 +82,7 @@ const ChatInterface = () => {
     if (!user) return;
 
     try {
+      // Create a new chat session
       const { data: session, error: sessionError } = await supabase
         .from('chat_sessions')
         .insert({
@@ -100,6 +96,7 @@ const ChatInterface = () => {
 
       setCurrentSessionId(session.id);
       
+      // Load recent messages for this session
       await loadChatHistory(session.id);
     } catch (error) {
       console.error('Error initializing chat session:', error);
@@ -122,7 +119,7 @@ const ChatInterface = () => {
         const formattedMessages: Message[] = chatMessages.map((msg: any) => ({
           id: msg.id,
           content: msg.message,
-          sender: msg.sender as 'user' | 'ai',
+          sender: msg.sender as 'user' | 'ai', // Fixed: using lowercase types
           timestamp: new Date(msg.created_at),
           corrections: msg.corrections || [],
           suggestions: msg.metadata?.suggestions || [],
@@ -142,7 +139,7 @@ const ChatInterface = () => {
       await supabase.from('chat_messages').insert({
         session_id: currentSessionId,
         message: message.content,
-        sender: message.sender,
+        sender: message.sender, // Now correctly typed as 'user' | 'ai'
         corrections: message.corrections || null,
         metadata: {
           suggestions: message.suggestions || [],
@@ -178,12 +175,12 @@ const ChatInterface = () => {
   };
 
   const sendMessage = async () => {
-    if (!inputMessage.trim() || isLoading || !currentSessionId || chatDisabled) return;
+    if (!inputMessage.trim() || isLoading || !currentSessionId) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
       content: inputMessage.trim(),
-      sender: 'user',
+      sender: 'user', // Updated to lowercase
       timestamp: new Date()
     };
 
@@ -192,6 +189,7 @@ const ChatInterface = () => {
     setInputMessage('');
     setIsLoading(true);
 
+    // Save user message
     await saveChatMessage(userMessage);
 
     try {
@@ -203,23 +201,17 @@ const ChatInterface = () => {
             chatHistory: messages.slice(-5).map(m => ({
               role: m.sender === 'user' ? 'user' : 'assistant',
               content: m.content
-            })),
-            user_id: user?.id
+            }))
           }
         }
       });
 
       if (error) throw error;
 
-      // Process AI response through context
-      if (data) {
-        setAiResponse(data);
-      }
-
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
         content: data.response,
-        sender: 'ai',
+        sender: 'ai', // Updated to lowercase
         timestamp: new Date(),
         corrections: data.corrections,
         suggestions: data.suggestions,
@@ -229,6 +221,7 @@ const ChatInterface = () => {
       const finalMessages = [...updatedMessages, aiMessage];
       setMessages(finalMessages);
 
+      // Save AI message
       await saveChatMessage(aiMessage);
 
       // Update user XP if corrections were made
@@ -242,7 +235,7 @@ const ChatInterface = () => {
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         content: 'Sorry, I encountered an error. Please try again.',
-        sender: 'ai',
+        sender: 'ai', // Updated to lowercase
         timestamp: new Date()
       };
       setMessages([...updatedMessages, errorMessage]);
@@ -323,6 +316,7 @@ const ChatInterface = () => {
                       )}
                     </div>
 
+                    {/* Grammar corrections */}
                     {message.corrections && message.corrections.length > 0 && (
                       <div className="mt-2 space-y-2">
                         <div className="text-sm font-medium text-orange-600">Grammar Corrections:</div>
@@ -344,6 +338,7 @@ const ChatInterface = () => {
                       </div>
                     )}
 
+                    {/* Grammar score */}
                     {message.grammarScore && (
                       <div className="mt-2 flex items-center space-x-2">
                         <CheckCircle className="h-4 w-4 text-green-500" />
@@ -353,6 +348,7 @@ const ChatInterface = () => {
                       </div>
                     )}
 
+                    {/* Suggestions */}
                     {message.suggestions && message.suggestions.length > 0 && (
                       <div className="mt-2 space-y-1">
                         <div className="text-sm font-medium text-blue-600 flex items-center space-x-1">
@@ -401,7 +397,7 @@ const ChatInterface = () => {
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyPress={handleKeyPress}
                 placeholder="Type your message or ask for grammar help..."
-                disabled={isLoading || chatDisabled}
+                disabled={isLoading}
                 className="pr-12"
               />
               <Button
@@ -409,7 +405,7 @@ const ChatInterface = () => {
                 size="sm"
                 className="absolute right-1 top-1/2 transform -translate-y-1/2 h-8 w-8 p-0"
                 onClick={isListening ? stopListening : startListening}
-                disabled={!recognition || chatDisabled}
+                disabled={!recognition}
               >
                 {isListening ? (
                   <MicOff className="h-4 w-4 text-red-500" />
@@ -420,7 +416,7 @@ const ChatInterface = () => {
             </div>
             <Button 
               onClick={sendMessage} 
-              disabled={!inputMessage.trim() || isLoading || chatDisabled}
+              disabled={!inputMessage.trim() || isLoading}
               size="sm"
             >
               <Send className="h-4 w-4" />
@@ -430,12 +426,6 @@ const ChatInterface = () => {
           {isListening && (
             <div className="text-center text-sm text-blue-600">
               🎤 Listening... Speak now
-            </div>
-          )}
-
-          {chatDisabled && (
-            <div className="text-center text-sm text-orange-600">
-              Chat is disabled while you complete the test.
             </div>
           )}
         </CardContent>

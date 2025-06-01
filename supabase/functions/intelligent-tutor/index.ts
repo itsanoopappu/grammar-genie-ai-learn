@@ -35,7 +35,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
     )
 
-    const { action, user_id, topic_id, user_level, difficulty_preference, session_id, performance_data } = await req.json()
+    const { action, user_id, topic_id, user_level, difficulty_preference, session_id } = await req.json()
 
     switch (action) {
       case 'get_personalized_exercises':
@@ -51,7 +51,7 @@ serve(async (req) => {
         return await getAssessmentDrivenRecommendations(supabaseClient, user_id, user_level)
       
       case 'update_skill_model':
-        return await updateSkillModel(supabaseClient, { user_id, topic_id, performance_data })
+        return await updateSkillModel(supabaseClient, req.json())
       
       case 'get_adaptive_difficulty':
         return await getAdaptiveDifficulty(supabaseClient, user_id, topic_id)
@@ -512,35 +512,6 @@ async function updateUserSkillLevel(supabaseClient: any, user_id: string, topic_
         next_review_due: nextReviewDue.toISOString()
       })
   }
-
-  return new Response(
-    JSON.stringify({ success: true }),
-    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-  )
-}
-
-async function updateSkillModel(supabaseClient: any, data: any) {
-  const { user_id, topic_id, performance_data } = data
-  
-  if (!user_id || !topic_id || !performance_data) {
-    throw new Error('Missing required parameters')
-  }
-
-  const { isCorrect, difficulty = 5, timeTaken = 60 } = performance_data
-  
-  await updateUserSkillLevel(
-    supabaseClient, 
-    user_id, 
-    topic_id, 
-    isCorrect, 
-    difficulty, 
-    timeTaken
-  )
-  
-  return new Response(
-    JSON.stringify({ success: true }),
-    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-  )
 }
 
 async function getTopicRecommendations(supabaseClient: any, user_id: string, user_level: string) {
@@ -592,6 +563,56 @@ async function getTopicRecommendations(supabaseClient: any, user_id: string, use
 
   return new Response(
     JSON.stringify({ recommendations: recommendations?.slice(0, 10) || [] }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  )
+}
+
+async function createLearningPath(supabaseClient: any, user_id: string, user_level: string) {
+  // Get user's assessment results to determine strengths/weaknesses
+  const { data: latestAssessment } = await supabaseClient
+    .from('assessment_results')
+    .select('*')
+    .eq('user_id', user_id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single()
+
+  // Get recommended topics
+  const topicRecs = await getTopicRecommendations(supabaseClient, user_id, user_level)
+  const topicsData = await topicRecs.json()
+  
+  const weakTopics = topicsData.recommendations
+    .filter((t: any) => t.priority === 'high')
+    .slice(0, 5)
+    .map((t: any) => t.id)
+
+  // Create adaptive learning path
+  const { data: learningPath } = await supabaseClient
+    .from('learning_paths')
+    .insert({
+      user_id,
+      path_type: 'adaptive',
+      target_level: user_level,
+      recommended_next_topics: weakTopics,
+      current_topic_id: weakTopics[0] || null
+    })
+    .select()
+    .single()
+
+  return new Response(
+    JSON.stringify({ learning_path: learningPath }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  )
+}
+
+async function updateSkillModel(supabaseClient: any, data: any) {
+  const { user_id, topic_id, performance_data } = data
+  
+  // This function can be called for batch updates or external integrations
+  // Implementation would depend on specific requirements
+  
+  return new Response(
+    JSON.stringify({ success: true }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   )
 }

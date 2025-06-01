@@ -1,30 +1,10 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import "https://deno.land/x/xhr@0.1.0/mod.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
-
-async function getTopicId(supabaseClient: any, topicName: string): Promise<string | null> {
-  try {
-    const { data, error } = await supabaseClient
-      .from('grammar_topics')
-      .select('id')
-      .eq('name', topicName)
-      .single();
-
-    if (error) {
-      console.error('Error fetching topic ID:', error);
-      return null;
-    }
-
-    return data?.id || null;
-  } catch (error) {
-    console.error('Error in getTopicId:', error);
-    return null;
-  }
 }
 
 serve(async (req) => {
@@ -39,122 +19,29 @@ serve(async (req) => {
       throw new Error('Message is required')
     }
 
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
-
-    // Handle test answer evaluation
-    if (context?.isTestActive && context?.userTestAnswer && context?.currentQuestion) {
-      const isCorrect = context.userTestAnswer.toLowerCase().trim() === 
-                        context.currentQuestion.correctAnswer.toLowerCase().trim();
-      
-      // Update user skills if we have user_id and topic ID
-      if (context.user_id && context.currentQuestion.topicId) {
-        try {
-          await supabaseClient.functions.invoke('intelligent-tutor', {
-            body: {
-              action: 'update_skill_model',
-              user_id: context.user_id,
-              topic_id: context.currentQuestion.topicId,
-              performance_data: {
-                isCorrect,
-                difficulty: 5,
-                timeTaken: 30
-              }
-            }
-          });
-        } catch (error) {
-          console.error('Error updating user skills:', error);
-        }
-      }
-
-      // Generate feedback response
-      return new Response(
-        JSON.stringify({
-          response: isCorrect 
-            ? `That's correct! ${context.currentQuestion.explanation}` 
-            : `Not quite. The correct answer is "${context.currentQuestion.correctAnswer}". ${context.currentQuestion.explanation}`,
-          grammarCard: null,
-          testQuestion: null,
-          isTestActive: false,
-          progressUpdate: {
-            topicId: context.currentQuestion.topicId,
-            isCorrect,
-            xpGain: isCorrect ? 10 : 5
-          }
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
     const systemPrompt = `You are GrammarAI, an expert English grammar tutor specializing in ${context?.userLevel || 'intermediate'} level instruction. Your role is to:
 
-1. FIRST PRINCIPLES TEACHING:
-   - Break down complex grammar concepts into fundamental building blocks
-   - Explain WHY rules exist, not just WHAT they are
-   - Show how basic principles combine to form more complex structures
-   - Connect new concepts to previously learned fundamentals
+1. GRAMMAR ANALYSIS: Carefully analyze user messages for grammar errors, including:
+   - Subject-verb agreement
+   - Tense consistency
+   - Article usage (a, an, the)
+   - Preposition errors
+   - Sentence structure issues
+   - Punctuation mistakes
 
-2. SITUATIONAL CONTEXT:
-   - Provide real-world examples showing when and why to use specific grammar
-   - Explain how context changes meaning and usage
-   - Demonstrate how formal vs informal situations affect grammar choices
-   - Show cultural and regional variations in usage
+2. EDUCATIONAL RESPONSE: Provide helpful, encouraging feedback that:
+   - Explains WHY something is correct or incorrect
+   - Offers memory techniques or rules
+   - Gives additional examples
+   - Adapts complexity to user's level
 
-3. ADAPTIVE TEACHING:
-   - Start with user's current level (${context?.userLevel})
-   - Gradually increase complexity as understanding improves
-   - Identify and address gaps in foundational knowledge
-   - Provide more challenging examples when basics are mastered
+3. STRUCTURED OUTPUT: Always respond with a JSON object containing:
+   - "response": Your main educational response
+   - "corrections": Array of specific grammar corrections (if any)
+   - "suggestions": Array of helpful grammar tips
+   - "grammarScore": Rate the grammar quality (1-100)
 
-4. TESTING AND FEEDBACK:
-   - Generate appropriate test questions based on user level
-   - Provide detailed explanations for both correct and incorrect answers
-   - Use mistakes as teaching opportunities
-   - Track progress and adjust difficulty accordingly
-
-5. STRUCTURED OUTPUT: Always respond with a JSON object containing:
-   {
-     "response": "Your conversational message",
-     "grammarCard": {
-       "name": "Grammar topic name",
-       "level": "CEFR level",
-       "description": "Clear explanation focusing on first principles",
-       "examples": ["Example 1", "Example 2"],
-       "situations": [
-         { "context": "Situation description", "usage": "How/why to use it" }
-       ],
-       "rulesChange": [
-         { "situation": "When context changes", "newRule": "How the rule adapts" }
-       ]
-     },
-     "testQuestion": {
-       "question": "Test question text",
-       "type": "multiple-choice" or "text-input",
-       "options": ["Option 1", "Option 2"] (for multiple-choice),
-       "correctAnswer": "Correct answer",
-       "explanation": "Why this is correct"
-     },
-     "isTestActive": boolean,
-     "progressUpdate": {
-       "topicId": "Grammar topic ID",
-       "isCorrect": boolean,
-       "xpGain": number
-     }
-   }
-
-Current Topic: ${context?.currentTopic || 'Not specified'}
-Chat History: ${JSON.stringify(context?.chatHistory || [])}
-
-Remember to:
-- Focus on understanding over memorization
-- Explain WHY rules work the way they do
-- Show how grammar reflects meaning and intent
-- Make connections between related concepts
-- Use real-world examples that resonate with learners
-
-IMPORTANT: When the user asks to test their skills or knowledge, ALWAYS include a testQuestion in your response with a clear question, options (for multiple-choice), correctAnswer, and explanation. Set isTestActive to true.`
+Be patient, encouraging, and focus on one or two key grammar points per response to avoid overwhelming the user.`
 
     console.log('Making OpenAI API request...')
     
@@ -165,7 +52,7 @@ IMPORTANT: When the user asks to test their skills or knowledge, ALWAYS include 
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4',
+        model: 'gpt-4o-mini',
         messages: [
           {
             role: 'system',
@@ -177,7 +64,7 @@ IMPORTANT: When the user asks to test their skills or knowledge, ALWAYS include 
           }
         ],
         temperature: 0.7,
-        max_tokens: 1000
+        max_tokens: 800
       })
     })
 
@@ -202,7 +89,7 @@ IMPORTANT: When the user asks to test their skills or knowledge, ALWAYS include 
       throw new Error('No content in OpenAI response')
     }
 
-    // Parse JSON response
+    // Try to parse as JSON, fallback to structured format
     let parsedResponse
     try {
       parsedResponse = JSON.parse(responseContent)
@@ -210,61 +97,27 @@ IMPORTANT: When the user asks to test their skills or knowledge, ALWAYS include 
       console.log('Failed to parse as JSON, creating structured response:', parseError)
       parsedResponse = {
         response: responseContent,
-        grammarCard: null,
-        testQuestion: null,
-        isTestActive: false,
-        progressUpdate: null
+        corrections: [],
+        suggestions: [],
+        grammarScore: 85
       }
     }
 
-    // If we have a grammar card, get its topic ID
-    if (parsedResponse.grammarCard?.name) {
-      const topicId = await getTopicId(supabaseClient, parsedResponse.grammarCard.name);
-      if (topicId) {
-        parsedResponse.grammarCard.id = topicId;
-        if (parsedResponse.testQuestion) {
-          parsedResponse.testQuestion.topicId = topicId;
-        }
-        if (parsedResponse.progressUpdate) {
-          parsedResponse.progressUpdate.topicId = topicId;
-        }
-      }
+    // Ensure required fields exist
+    if (!parsedResponse.response) {
+      parsedResponse.response = responseContent
+    }
+    if (!parsedResponse.corrections) {
+      parsedResponse.corrections = []
+    }
+    if (!parsedResponse.suggestions) {
+      parsedResponse.suggestions = []
+    }
+    if (!parsedResponse.grammarScore) {
+      parsedResponse.grammarScore = 85
     }
 
-    // Update user skills if there's a progress update
-    if (parsedResponse.progressUpdate?.topicId && context?.user_id) {
-      try {
-        const { data: userSkill } = await supabaseClient
-          .from('user_skills')
-          .select('*')
-          .eq('user_id', context.user_id)
-          .eq('topic_id', parsedResponse.progressUpdate.topicId)
-          .single()
-
-        const skillUpdate = {
-          user_id: context.user_id,
-          topic_id: parsedResponse.progressUpdate.topicId,
-          skill_level: userSkill 
-            ? Math.min(1, userSkill.skill_level + (parsedResponse.progressUpdate.isCorrect ? 0.1 : -0.05))
-            : parsedResponse.progressUpdate.isCorrect ? 0.6 : 0.4,
-          attempts_count: (userSkill?.attempts_count || 0) + 1,
-          last_practiced: new Date().toISOString()
-        }
-
-        if (userSkill) {
-          await supabaseClient
-            .from('user_skills')
-            .update(skillUpdate)
-            .eq('id', userSkill.id)
-        } else {
-          await supabase
-            .from('user_skills')
-            .insert(skillUpdate)
-        }
-      } catch (error) {
-        console.error('Error updating user skills:', error)
-      }
-    }
+    console.log('Returning parsed response:', parsedResponse)
 
     return new Response(
       JSON.stringify(parsedResponse),
@@ -277,10 +130,9 @@ IMPORTANT: When the user asks to test their skills or knowledge, ALWAYS include 
       JSON.stringify({ 
         error: error.message,
         response: "I'm having trouble right now. Please try again later.",
-        grammarCard: null,
-        testQuestion: null,
-        isTestActive: false,
-        progressUpdate: null
+        corrections: [],
+        suggestions: [],
+        grammarScore: null
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     )
