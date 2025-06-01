@@ -83,7 +83,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
-          }
+          },
         ]
       }
       chat_messages: {
@@ -121,7 +121,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "chat_sessions"
             referencedColumns: ["id"]
-          }
+          },
         ]
       }
       chat_sessions: {
@@ -150,7 +150,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
-          }
+          },
         ]
       }
       drill_recommendations: {
@@ -194,7 +194,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
-          }
+          },
         ]
       }
       exercise_attempts: {
@@ -261,7 +261,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
-          }
+          },
         ]
       }
       exercises: {
@@ -311,7 +311,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "grammar_topics"
             referencedColumns: ["id"]
-          }
+          },
         ]
       }
       grammar_topics: {
@@ -407,35 +407,41 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
-          }
+          },
         ]
       }
       placement_tests: {
         Row: {
+          assessment_type: string | null
           completed_at: string | null
           id: string
+          immediate_feedback: boolean | null
           level: string | null
           score: number | null
           started_at: string | null
-          test_type: Database["public"]["Enums"]["test_type"]
+          total_questions: number | null
           user_id: string | null
         }
         Insert: {
+          assessment_type?: string | null
           completed_at?: string | null
           id?: string
+          immediate_feedback?: boolean | null
           level?: string | null
           score?: number | null
           started_at?: string | null
-          test_type: Database["public"]["Enums"]["test_type"]
+          total_questions?: number | null
           user_id?: string | null
         }
         Update: {
+          assessment_type?: string | null
           completed_at?: string | null
           id?: string
+          immediate_feedback?: boolean | null
           level?: string | null
           score?: number | null
           started_at?: string | null
-          test_type?: Database["public"]["Enums"]["test_type"]
+          total_questions?: number | null
           user_id?: string | null
         }
         Relationships: [
@@ -445,7 +451,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
-          }
+          },
         ]
       }
       practice_sessions: {
@@ -508,7 +514,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
-          }
+          },
         ]
       }
       profiles: {
@@ -550,39 +556,57 @@ export type Database = {
       test_questions: {
         Row: {
           correct_answer: string
+          detailed_explanation: string | null
+          difficulty_score: number | null
           explanation: string | null
+          first_principles_explanation: string | null
           id: string
           is_correct: boolean | null
           level: string | null
           options: Json | null
           question: string
+          question_type: string | null
           test_id: string | null
           topic: string | null
+          topic_tags: Json | null
           user_answer: string | null
+          wrong_answer_explanations: Json | null
         }
         Insert: {
           correct_answer: string
+          detailed_explanation?: string | null
+          difficulty_score?: number | null
           explanation?: string | null
+          first_principles_explanation?: string | null
           id?: string
           is_correct?: boolean | null
           level?: string | null
           options?: Json | null
           question: string
+          question_type?: string | null
           test_id?: string | null
           topic?: string | null
+          topic_tags?: Json | null
           user_answer?: string | null
+          wrong_answer_explanations?: Json | null
         }
         Update: {
           correct_answer?: string
+          detailed_explanation?: string | null
+          difficulty_score?: number | null
           explanation?: string | null
+          first_principles_explanation?: string | null
           id?: string
           is_correct?: boolean | null
           level?: string | null
           options?: Json | null
           question?: string
+          question_type?: string | null
           test_id?: string | null
           topic?: string | null
+          topic_tags?: Json | null
           user_answer?: string | null
+          wrong_answer_explanations?: Json | null
         }
         Relationships: [
           {
@@ -591,7 +615,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "placement_tests"
             referencedColumns: ["id"]
-          }
+          },
         ]
       }
       user_achievements: {
@@ -627,7 +651,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
-          }
+          },
         ]
       }
       user_memory: {
@@ -659,7 +683,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
-          }
+          },
         ]
       }
       user_progress: {
@@ -700,7 +724,39 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
-          }
+          },
+        ]
+      }
+      user_question_history: {
+        Row: {
+          id: string
+          question_id: string
+          seen_at: string
+          test_id: string | null
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          question_id: string
+          seen_at?: string
+          test_id?: string | null
+          user_id: string
+        }
+        Update: {
+          id?: string
+          question_id?: string
+          seen_at?: string
+          test_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_question_history_test_id_fkey"
+            columns: ["test_id"]
+            isOneToOne: false
+            referencedRelation: "placement_tests"
+            referencedColumns: ["id"]
+          },
         ]
       }
       user_skills: {
@@ -757,7 +813,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
-          }
+          },
         ]
       }
     }
@@ -765,7 +821,22 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_unseen_questions_for_user: {
+        Args: { p_user_id: string; p_limit?: number }
+        Returns: {
+          id: string
+          question: string
+          options: Json
+          correct_answer: string
+          topic: string
+          level: string
+          explanation: string
+          detailed_explanation: string
+          first_principles_explanation: string
+          wrong_answer_explanations: Json
+          difficulty_score: number
+        }[]
+      }
     }
     Enums: {
       chat_sender_type: "user" | "ai"

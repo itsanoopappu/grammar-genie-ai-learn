@@ -6,12 +6,28 @@ import { useAuth } from './useAuth';
 import { useProfile } from './useProfile';
 
 interface Question {
+  id: string;
   question: string;
   options: string[];
-  correct: string;
+  correct_answer: string;
   topic: string;
   level: string;
   explanation: string;
+  detailed_explanation?: string;
+  first_principles_explanation?: string;
+  wrong_answer_explanations?: Record<string, string>;
+  difficulty_score?: number;
+}
+
+interface QuestionFeedback {
+  isCorrect: boolean;
+  correctAnswer: string;
+  explanation: string;
+  detailedExplanation?: string;
+  firstPrinciplesExplanation?: string;
+  wrongAnswerExplanations?: Record<string, string>;
+  topic: string;
+  level: string;
 }
 
 interface TestResults {
@@ -36,14 +52,15 @@ interface TestState {
   selectedAnswer: string;
   questions: Question[];
   userAnswers: Record<string, string>;
+  questionFeedbacks: Record<string, QuestionFeedback>;
   testCompleted: boolean;
   testResults: TestResults | null;
   loading: boolean;
   error: string | null;
-  testType: 'quick' | 'comprehensive';
   timeSpent: number;
   startTime: Date | null;
-  estimatedTime: number;
+  showingFeedback: boolean;
+  currentFeedback: QuestionFeedback | null;
 }
 
 const initialState: TestState = {
@@ -53,14 +70,15 @@ const initialState: TestState = {
   selectedAnswer: '',
   questions: [],
   userAnswers: {},
+  questionFeedbacks: {},
   testCompleted: false,
   testResults: null,
   loading: false,
   error: null,
-  testType: 'quick',
   timeSpent: 0,
   startTime: null,
-  estimatedTime: 5
+  showingFeedback: false,
+  currentFeedback: null
 };
 
 const testStateAtom = atom<TestState>(initialState);
@@ -70,20 +88,17 @@ export const usePlacementTestLogic = () => {
   const { user } = useAuth();
   const { profile, updateProfile } = useProfile();
 
-  const startTest = async (testType: 'quick' | 'comprehensive' = 'quick') => {
+  const startTest = async () => {
     setState(produce(state => { 
       state.loading = true;
       state.error = null;
-      state.testType = testType;
     }));
 
     try {
       const { data, error } = await supabase.functions.invoke('placement-test', {
         body: { 
-          action: 'generate',
-          level: profile?.level || 'A2',
-          user_id: user?.id,
-          test_type: testType
+          action: 'start_assessment',
+          user_id: user?.id
         }
       });
 
@@ -95,40 +110,75 @@ export const usePlacementTestLogic = () => {
         state.testStarted = true;
         state.currentQuestion = 0;
         state.userAnswers = {};
+        state.questionFeedbacks = {};
         state.testCompleted = false;
         state.startTime = new Date();
         state.timeSpent = 0;
-        state.estimatedTime = data.estimatedTime || (testType === 'quick' ? 5 : 15);
+        state.showingFeedback = false;
+        state.currentFeedback = null;
         state.loading = false;
       }));
     } catch (error: any) {
       setState(produce(state => { 
         state.loading = false;
-        state.error = error.message || 'Failed to start test. Please try again.';
+        state.error = error.message || 'Failed to start assessment. Please try again.';
       }));
     }
   };
 
   const submitAnswer = async () => {
-    if (!state.selectedAnswer) return;
+    if (!state.selectedAnswer || !state.questions[state.currentQuestion]) return;
 
-    const newAnswers = { ...state.userAnswers, [state.questions[state.currentQuestion].question]: state.selectedAnswer };
-    
-    setState(produce(state => {
-      state.userAnswers = newAnswers;
-      state.selectedAnswer = '';
+    setState(produce(state => { 
+      state.loading = true;
     }));
 
-    if (state.currentQuestion < state.questions.length - 1) {
+    try {
+      const currentQuestion = state.questions[state.currentQuestion];
+      
+      // Submit answer and get immediate feedback
+      const { data: feedback, error } = await supabase.functions.invoke('placement-test', {
+        body: { 
+          action: 'submit_answer',
+          user_id: user?.id,
+          test_id: state.testId,
+          question_id: currentQuestion.id,
+          user_answer: state.selectedAnswer
+        }
+      });
+
+      if (error) throw error;
+
       setState(produce(state => {
-        state.currentQuestion += 1;
+        state.userAnswers[currentQuestion.id] = state.selectedAnswer;
+        state.questionFeedbacks[currentQuestion.id] = feedback;
+        state.currentFeedback = feedback;
+        state.showingFeedback = true;
+        state.loading = false;
+        state.selectedAnswer = '';
       }));
-    } else {
-      await completeTest(newAnswers);
+
+    } catch (error: any) {
+      setState(produce(state => { 
+        state.loading = false;
+        state.error = error.message || 'Failed to submit answer. Please try again.';
+      }));
     }
   };
 
-  const completeTest = async (finalAnswers: Record<string, string>) => {
+  const nextQuestion = () => {
+    if (state.currentQuestion < state.questions.length - 1) {
+      setState(produce(state => {
+        state.currentQuestion += 1;
+        state.showingFeedback = false;
+        state.currentFeedback = null;
+      }));
+    } else {
+      completeTest();
+    }
+  };
+
+  const completeTest = async () => {
     setState(produce(state => { 
       state.loading = true;
       state.error = null;
@@ -137,8 +187,8 @@ export const usePlacementTestLogic = () => {
     try {
       const { data, error } = await supabase.functions.invoke('placement-test', {
         body: { 
-          action: 'evaluate',
-          answers: finalAnswers,
+          action: 'complete_assessment',
+          answers: state.userAnswers,
           test_id: state.testId
         }
       });
@@ -167,7 +217,7 @@ export const usePlacementTestLogic = () => {
     } catch (error: any) {
       setState(produce(state => { 
         state.loading = false;
-        state.error = error.message || 'Failed to complete test. Please try again.';
+        state.error = error.message || 'Failed to complete assessment. Please try again.';
       }));
     }
   };
@@ -180,12 +230,21 @@ export const usePlacementTestLogic = () => {
     setState(produce(state => { state.selectedAnswer = answer }));
   };
 
-  const previousQuestion = () => {
-    if (state.currentQuestion > 0) {
-      setState(produce(state => {
-        state.currentQuestion -= 1;
-        state.selectedAnswer = state.userAnswers[state.questions[state.currentQuestion - 1].question] || '';
-      }));
+  const generateQuestions = async (count: number = 100, level: string = 'mixed') => {
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-assessment-questions', {
+        body: { 
+          action: 'generate_questions',
+          count,
+          level
+        }
+      });
+
+      if (error) throw error;
+      return data;
+    } catch (error: any) {
+      console.error('Failed to generate questions:', error);
+      throw error;
     }
   };
 
@@ -193,9 +252,10 @@ export const usePlacementTestLogic = () => {
     state,
     startTest,
     submitAnswer,
+    nextQuestion,
     resetTest,
     setSelectedAnswer,
-    previousQuestion
+    generateQuestions
   };
 };
 

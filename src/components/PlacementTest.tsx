@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,19 +5,31 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle, Target, BookOpen, TrendingUp, Clock, Zap, Award, ArrowLeft, ArrowRight, Star } from 'lucide-react';
+import { CheckCircle, Target, BookOpen, TrendingUp, Clock, Award, ArrowRight, Star, X, Lightbulb, Brain, AlertCircle } from 'lucide-react';
 import { usePlacementTestLogic } from '@/hooks/usePlacementTestLogic';
 import LoadingState from './LoadingState';
 
 const PlacementTest = () => {
-  const { state, startTest, submitAnswer, resetTest, setSelectedAnswer, previousQuestion } = usePlacementTestLogic();
-  const [selectedTestType, setSelectedTestType] = useState<'quick' | 'comprehensive'>('quick');
+  const { state, startTest, submitAnswer, nextQuestion, resetTest, setSelectedAnswer, generateQuestions } = usePlacementTestLogic();
+  const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
 
   const testProgress = state.testStarted ? ((state.currentQuestion + 1) / state.questions.length) * 100 : 0;
   const timeElapsed = state.startTime ? Math.floor((Date.now() - state.startTime.getTime()) / 1000 / 60) : 0;
 
+  const handleGenerateQuestions = async () => {
+    setIsGeneratingQuestions(true);
+    try {
+      await generateQuestions(200, 'mixed');
+      alert('Successfully generated 200 new assessment questions!');
+    } catch (error) {
+      alert('Failed to generate questions. Please ensure your OpenAI API key is configured.');
+    } finally {
+      setIsGeneratingQuestions(false);
+    }
+  };
+
   if (state.loading && !state.testStarted) {
-    return <LoadingState message={`Preparing your ${state.testType} assessment...`} />;
+    return <LoadingState message="Preparing your comprehensive assessment..." />;
   }
 
   return (
@@ -27,18 +38,21 @@ const PlacementTest = () => {
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
             <Target className="h-5 w-5 text-blue-500" />
-            <span>English Placement Assessment</span>
+            <span>Comprehensive English Assessment</span>
           </CardTitle>
           <CardDescription>
-            Get an accurate assessment of your English proficiency level with personalized recommendations.
+            Take a detailed 15-question assessment with immediate feedback and comprehensive explanations.
           </CardDescription>
         </CardHeader>
 
         <CardContent>
           {state.error && (
             <div className="mb-4 p-4 bg-red-50 text-red-700 rounded-md border border-red-200">
-              <p className="font-medium">Assessment Error</p>
-              <p className="text-sm">{state.error}</p>
+              <div className="flex items-center space-x-2">
+                <AlertCircle className="h-4 w-4" />
+                <p className="font-medium">Assessment Error</p>
+              </div>
+              <p className="text-sm mt-1">{state.error}</p>
               <Button variant="outline" size="sm" onClick={resetTest} className="mt-2">
                 Try Again
               </Button>
@@ -47,62 +61,61 @@ const PlacementTest = () => {
 
           {!state.testStarted && !state.testCompleted && (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Card 
-                  className={`cursor-pointer transition-all ${selectedTestType === 'quick' ? 'ring-2 ring-blue-500 bg-blue-50' : 'hover:bg-gray-50'}`}
-                  onClick={() => setSelectedTestType('quick')}
-                >
-                  <CardContent className="p-6">
-                    <div className="flex items-center space-x-3 mb-3">
-                      <Zap className="h-6 w-6 text-blue-500" />
-                      <h3 className="font-semibold text-lg">Quick Assessment</h3>
+              <Card className="bg-gradient-to-r from-blue-50 to-indigo-50">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <Award className="h-8 w-8 text-blue-500" />
+                    <div>
+                      <h3 className="font-semibold text-xl">Comprehensive Assessment</h3>
+                      <Badge className="bg-blue-100 text-blue-700 mt-1">Enhanced with AI Feedback</Badge>
                     </div>
-                    <ul className="space-y-2 text-sm text-gray-600">
-                      <li className="flex items-center space-x-2">
-                        <Clock className="h-4 w-4" />
-                        <span>5 minutes</span>
-                      </li>
-                      <li>• 5 targeted questions</li>
-                      <li>• Basic level estimation</li>
-                      <li>• Instant results</li>
-                      <li>• 50+ XP reward</li>
-                    </ul>
-                  </CardContent>
-                </Card>
+                  </div>
+                  <ul className="space-y-3 text-gray-700">
+                    <li className="flex items-center space-x-3">
+                      <Clock className="h-5 w-5 text-blue-500" />
+                      <span><strong>Duration:</strong> 20 minutes (15 questions)</span>
+                    </li>
+                    <li className="flex items-center space-x-3">
+                      <Brain className="h-5 w-5 text-blue-500" />
+                      <span><strong>Immediate Feedback:</strong> Detailed explanations after each question</span>
+                    </li>
+                    <li className="flex items-center space-x-3">
+                      <Lightbulb className="h-5 w-5 text-blue-500" />
+                      <span><strong>First Principles:</strong> Deep understanding of grammar concepts</span>
+                    </li>
+                    <li className="flex items-center space-x-3">
+                      <Target className="h-5 w-5 text-blue-500" />
+                      <span><strong>Personalized:</strong> No repeated questions, tailored to your level</span>
+                    </li>
+                    <li className="flex items-center space-x-3">
+                      <Award className="h-5 w-5 text-blue-500" />
+                      <span><strong>Rewards:</strong> 100+ XP based on performance</span>
+                    </li>
+                  </ul>
+                </CardContent>
+              </Card>
 
-                <Card 
-                  className={`cursor-pointer transition-all ${selectedTestType === 'comprehensive' ? 'ring-2 ring-purple-500 bg-purple-50' : 'hover:bg-gray-50'}`}
-                  onClick={() => setSelectedTestType('comprehensive')}
-                >
-                  <CardContent className="p-6">
-                    <div className="flex items-center space-x-3 mb-3">
-                      <Award className="h-6 w-6 text-purple-500" />
-                      <h3 className="font-semibold text-lg">Comprehensive Assessment</h3>
-                      <Badge className="bg-purple-100 text-purple-700">Recommended</Badge>
-                    </div>
-                    <ul className="space-y-2 text-sm text-gray-600">
-                      <li className="flex items-center space-x-2">
-                        <Clock className="h-4 w-4" />
-                        <span>15 minutes</span>
-                      </li>
-                      <li>• 15 detailed questions</li>
-                      <li>• Precise level assessment</li>
-                      <li>• Detailed topic analysis</li>
-                      <li>• 100+ XP reward</li>
-                    </ul>
-                  </CardContent>
-                </Card>
-              </div>
-
-              <div className="text-center">
+              <div className="text-center space-y-4">
                 <Button 
-                  onClick={() => startTest(selectedTestType)} 
+                  onClick={startTest} 
                   disabled={state.loading}
                   size="lg"
-                  className={selectedTestType === 'comprehensive' ? 'bg-purple-600 hover:bg-purple-700' : ''}
+                  className="bg-blue-600 hover:bg-blue-700"
                 >
-                  {state.loading ? 'Loading...' : `Start ${selectedTestType === 'quick' ? 'Quick' : 'Comprehensive'} Assessment`}
+                  {state.loading ? 'Loading...' : 'Start Comprehensive Assessment'}
                 </Button>
+                
+                <div className="border-t pt-4">
+                  <p className="text-sm text-gray-600 mb-2">Admin: Generate more questions for the database</p>
+                  <Button 
+                    onClick={handleGenerateQuestions}
+                    disabled={isGeneratingQuestions}
+                    variant="outline"
+                    size="sm"
+                  >
+                    {isGeneratingQuestions ? 'Generating...' : 'Generate 200 Questions'}
+                  </Button>
+                </div>
               </div>
             </div>
           )}
@@ -116,77 +129,158 @@ const PlacementTest = () => {
                     <h3 className="text-lg font-semibold">
                       Question {state.currentQuestion + 1} of {state.questions.length}
                     </h3>
-                    <Badge variant="outline" className={state.testType === 'comprehensive' ? 'border-purple-200 text-purple-700' : ''}>
-                      {state.testType === 'quick' ? 'Quick' : 'Comprehensive'} Assessment
+                    <Badge variant="outline" className="border-blue-200 text-blue-700">
+                      Comprehensive Assessment
                     </Badge>
                   </div>
                   <div className="flex items-center space-x-2 text-sm text-gray-500">
                     <Clock className="h-4 w-4" />
-                    <span>{timeElapsed} min / ~{state.estimatedTime} min</span>
+                    <span>{timeElapsed} min</span>
                   </div>
                 </div>
                 <Progress value={testProgress} className="h-3" />
               </div>
 
-              {/* Question */}
-              <Card className="bg-gradient-to-r from-blue-50 to-indigo-50">
-                <CardContent className="p-6">
-                  <div className="mb-4">
-                    {state.questions[state.currentQuestion].level && (
-                      <Badge variant="secondary" className="mb-3">
-                        Level: {state.questions[state.currentQuestion].level}
-                      </Badge>
-                    )}
-                    <h4 className="text-xl font-medium text-gray-800">
-                      {state.questions[state.currentQuestion].question}
-                    </h4>
-                  </div>
-
-                  <RadioGroup value={state.selectedAnswer} onValueChange={setSelectedAnswer} className="space-y-3">
-                    {state.questions[state.currentQuestion].options.map((option) => (
-                      <div key={option} className="flex items-center space-x-3 p-3 rounded-lg hover:bg-white/60 transition-colors">
-                        <RadioGroupItem value={option} id={option} />
-                        <Label htmlFor={option} className="cursor-pointer text-base">
-                          {option}
-                        </Label>
+              {!state.showingFeedback ? (
+                // Question Display
+                <Card className="bg-gradient-to-r from-blue-50 to-indigo-50">
+                  <CardContent className="p-6">
+                    <div className="mb-4">
+                      <div className="flex items-center space-x-2 mb-3">
+                        {state.questions[state.currentQuestion].level && (
+                          <Badge variant="secondary">
+                            Level: {state.questions[state.currentQuestion].level}
+                          </Badge>
+                        )}
+                        {state.questions[state.currentQuestion].topic && (
+                          <Badge variant="outline">
+                            {state.questions[state.currentQuestion].topic}
+                          </Badge>
+                        )}
                       </div>
-                    ))}
-                  </RadioGroup>
-                </CardContent>
-              </Card>
+                      <h4 className="text-xl font-medium text-gray-800">
+                        {state.questions[state.currentQuestion].question}
+                      </h4>
+                    </div>
 
-              {/* Navigation */}
-              <div className="flex justify-between items-center">
-                <Button 
-                  variant="outline" 
-                  onClick={previousQuestion}
-                  disabled={state.currentQuestion === 0}
-                  className="flex items-center space-x-2"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                  <span>Previous</span>
-                </Button>
+                    <RadioGroup value={state.selectedAnswer} onValueChange={setSelectedAnswer} className="space-y-3">
+                      {state.questions[state.currentQuestion].options.map((option) => (
+                        <div key={option} className="flex items-center space-x-3 p-3 rounded-lg hover:bg-white/60 transition-colors">
+                          <RadioGroupItem value={option} id={option} />
+                          <Label htmlFor={option} className="cursor-pointer text-base flex-1">
+                            {option}
+                          </Label>
+                        </div>
+                      ))}
+                    </RadioGroup>
 
-                <Button 
-                  onClick={submitAnswer} 
-                  disabled={!state.selectedAnswer || state.loading}
-                  className="flex items-center space-x-2"
-                >
-                  {state.loading ? (
-                    'Processing...'
-                  ) : state.currentQuestion === state.questions.length - 1 ? (
-                    <>
-                      <CheckCircle className="h-4 w-4" />
-                      <span>Complete Assessment</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>Next Question</span>
-                      <ArrowRight className="h-4 w-4" />
-                    </>
-                  )}
-                </Button>
-              </div>
+                    <div className="mt-6 flex justify-end">
+                      <Button 
+                        onClick={submitAnswer} 
+                        disabled={!state.selectedAnswer || state.loading}
+                        className="flex items-center space-x-2"
+                      >
+                        {state.loading ? (
+                          'Checking...'
+                        ) : (
+                          <>
+                            <span>Submit Answer</span>
+                            <ArrowRight className="h-4 w-4" />
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                // Feedback Display
+                state.currentFeedback && (
+                  <Card className={`border-2 ${state.currentFeedback.isCorrect ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
+                    <CardContent className="p-6">
+                      <div className="space-y-4">
+                        {/* Result Header */}
+                        <div className="flex items-center space-x-3">
+                          {state.currentFeedback.isCorrect ? (
+                            <CheckCircle className="h-8 w-8 text-green-600" />
+                          ) : (
+                            <X className="h-8 w-8 text-red-600" />
+                          )}
+                          <div>
+                            <h3 className={`text-xl font-semibold ${state.currentFeedback.isCorrect ? 'text-green-800' : 'text-red-800'}`}>
+                              {state.currentFeedback.isCorrect ? 'Correct!' : 'Incorrect'}
+                            </h3>
+                            <p className="text-sm text-gray-600">
+                              The correct answer is: <strong>{state.currentFeedback.correctAnswer}</strong>
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Basic Explanation */}
+                        <div className="bg-white p-4 rounded-lg">
+                          <h4 className="font-medium text-gray-800 mb-2 flex items-center space-x-2">
+                            <Lightbulb className="h-4 w-4 text-yellow-500" />
+                            <span>Explanation</span>
+                          </h4>
+                          <p className="text-gray-700">{state.currentFeedback.explanation}</p>
+                        </div>
+
+                        {/* Detailed Explanation */}
+                        {state.currentFeedback.detailedExplanation && (
+                          <div className="bg-white p-4 rounded-lg">
+                            <h4 className="font-medium text-gray-800 mb-2 flex items-center space-x-2">
+                              <BookOpen className="h-4 w-4 text-blue-500" />
+                              <span>Detailed Analysis</span>
+                            </h4>
+                            <p className="text-gray-700">{state.currentFeedback.detailedExplanation}</p>
+                          </div>
+                        )}
+
+                        {/* First Principles */}
+                        {state.currentFeedback.firstPrinciplesExplanation && (
+                          <div className="bg-white p-4 rounded-lg">
+                            <h4 className="font-medium text-gray-800 mb-2 flex items-center space-x-2">
+                              <Brain className="h-4 w-4 text-purple-500" />
+                              <span>First Principles</span>
+                            </h4>
+                            <p className="text-gray-700">{state.currentFeedback.firstPrinciplesExplanation}</p>
+                          </div>
+                        )}
+
+                        {/* Wrong Answer Explanations */}
+                        {!state.currentFeedback.isCorrect && state.currentFeedback.wrongAnswerExplanations && (
+                          <div className="bg-white p-4 rounded-lg">
+                            <h4 className="font-medium text-gray-800 mb-2">Why other answers are incorrect:</h4>
+                            <div className="space-y-2">
+                              {Object.entries(state.currentFeedback.wrongAnswerExplanations).map(([answer, explanation]) => (
+                                <div key={answer} className="text-sm">
+                                  <span className="font-medium text-red-600">"{answer}":</span>
+                                  <span className="text-gray-700 ml-2">{explanation}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex justify-end">
+                          <Button onClick={nextQuestion} className="flex items-center space-x-2">
+                            {state.currentQuestion === state.questions.length - 1 ? (
+                              <>
+                                <CheckCircle className="h-4 w-4" />
+                                <span>Complete Assessment</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>Next Question</span>
+                                <ArrowRight className="h-4 w-4" />
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              )}
             </div>
           )}
 
