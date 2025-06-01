@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import "https://deno.land/x/xhr@0.1.0/mod.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -29,7 +28,7 @@ serve(async (req) => {
           user_id,
           assessment_type: 'comprehensive',
           total_questions: 15,
-          immediate_feedback: false, // Changed to false - no immediate feedback
+          immediate_feedback: false,
           started_at: new Date().toISOString()
         })
         .select()
@@ -40,34 +39,100 @@ serve(async (req) => {
         throw new Error(`Failed to create test entry: ${testError.message}`);
       }
 
-      // Get balanced questions across all levels using the database function
-      const { data: questions, error: questionsError } = await supabaseClient
-        .rpc('get_unseen_questions_for_user', {
-          p_user_id: user_id,
-          p_limit: 15
-        })
+      // Get balanced questions across all levels
+      const levels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+      const questionsPerLevel = 2; // 2-3 questions per level for 15 total
+      const extraQuestions = 3; // 15 - (6 * 2)
+      let allQuestions: any[] = [];
 
-      if (questionsError) {
-        console.error('Questions fetch error:', questionsError);
-        throw new Error(`Failed to fetch questions: ${questionsError.message}`);
+      console.log('Fetching balanced questions across all levels...');
+
+      for (let i = 0; i < levels.length; i++) {
+        const level = levels[i];
+        const targetCount = questionsPerLevel + (i < extraQuestions ? 1 : 0);
+        
+        console.log(`Fetching ${targetCount} questions for level ${level}`);
+
+        const { data: levelQuestions, error: questionsError } = await supabaseClient
+          .from('test_questions')
+          .select('*')
+          .eq('level', level)
+          .not('question', 'is', null)
+          .not('correct_answer', 'is', null)
+          .not('options', 'is', null)
+          .order('difficulty_score', { ascending: true })
+          .order('id') // For consistent ordering
+          .limit(targetCount * 3) // Get more to filter out seen ones
+
+        if (questionsError) {
+          console.error(`Questions fetch error for level ${level}:`, questionsError);
+          continue;
+        }
+
+        if (!levelQuestions || levelQuestions.length === 0) {
+          console.warn(`No questions available for level ${level}`);
+          continue;
+        }
+
+        // Filter out questions the user has already seen
+        const { data: seenQuestions } = await supabaseClient
+          .from('user_question_history')
+          .select('question_id')
+          .eq('user_id', user_id)
+          .in('question_id', levelQuestions.map(q => q.id))
+
+        const seenQuestionIds = new Set(seenQuestions?.map(sq => sq.question_id) || []);
+        const unseenQuestions = levelQuestions.filter(q => !seenQuestionIds.has(q.id));
+
+        // Take the required number of questions for this level
+        const selectedQuestions = unseenQuestions.slice(0, targetCount);
+        allQuestions = allQuestions.concat(selectedQuestions);
+
+        console.log(`Selected ${selectedQuestions.length} questions for level ${level}`);
       }
 
-      if (!questions || questions.length === 0) {
+      // If we don't have enough questions, fill with any available unseen questions
+      if (allQuestions.length < 15) {
+        console.log(`Only got ${allQuestions.length} questions, filling with additional questions...`);
+        
+        const { data: additionalQuestions, error: additionalError } = await supabaseClient
+          .rpc('get_unseen_questions_for_user', {
+            p_user_id: user_id,
+            p_limit: 15 - allQuestions.length
+          })
+
+        if (!additionalError && additionalQuestions) {
+          const existingIds = new Set(allQuestions.map(q => q.id));
+          const newQuestions = additionalQuestions.filter(q => !existingIds.has(q.id));
+          allQuestions = allQuestions.concat(newQuestions);
+        }
+      }
+
+      // Shuffle the questions for variety
+      for (let i = allQuestions.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [allQuestions[i], allQuestions[j]] = [allQuestions[j], allQuestions[i]];
+      }
+
+      // Limit to exactly 15 questions
+      allQuestions = allQuestions.slice(0, 15);
+
+      if (allQuestions.length === 0) {
         throw new Error('No available questions found. Please contact support.');
       }
 
-      // Ensure we have a good distribution across levels
-      const levelCounts = questions.reduce((acc: any, q: any) => {
+      // Log the final distribution
+      const finalLevelCounts = allQuestions.reduce((acc: any, q: any) => {
         acc[q.level] = (acc[q.level] || 0) + 1;
         return acc;
       }, {});
-      console.log('Selected questions level distribution:', levelCounts);
+      console.log('Final assessment level distribution:', finalLevelCounts);
 
       // Create test questions entries
       const { error: testQuestionsError } = await supabaseClient
         .from('test_questions')
         .update({ test_id: testData.id })
-        .in('id', questions.map(q => q.id))
+        .in('id', allQuestions.map(q => q.id))
 
       if (testQuestionsError) {
         console.error('Test questions assignment error:', testQuestionsError);
@@ -76,9 +141,9 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           testId: testData.id,
-          questions: questions.slice(0, 15), // Ensure exactly 15 questions
+          questions: allQuestions,
           estimatedTime: 20,
-          levelDistribution: levelCounts
+          levelDistribution: finalLevelCounts
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )

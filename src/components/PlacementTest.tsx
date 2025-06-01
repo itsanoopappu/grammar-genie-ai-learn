@@ -5,7 +5,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle, Target, BookOpen, TrendingUp, Clock, Award, ArrowRight, Star, Lightbulb, Brain, AlertCircle } from 'lucide-react';
+import { CheckCircle, Target, BookOpen, TrendingUp, Clock, Award, ArrowRight, Star, Lightbulb, Brain, AlertCircle, BarChart3 } from 'lucide-react';
 import { usePlacementTestLogic } from '@/hooks/usePlacementTestLogic';
 import LoadingState from './LoadingState';
 
@@ -19,8 +19,8 @@ const PlacementTest = () => {
   const handleGenerateQuestions = async () => {
     setIsGeneratingQuestions(true);
     try {
-      await generateQuestions(200, 'mixed');
-      alert('Successfully generated 200 new assessment questions with balanced level distribution!');
+      await generateQuestions(300, 'mixed'); // Generate more questions to balance database
+      alert('Successfully generated 300 new assessment questions with balanced level distribution!');
     } catch (error) {
       alert('Failed to generate questions. Please ensure your OpenAI API key is configured.');
     } finally {
@@ -29,7 +29,7 @@ const PlacementTest = () => {
   };
 
   if (state.loading && !state.testStarted) {
-    return <LoadingState message="Preparing your balanced assessment..." />;
+    return <LoadingState message="Preparing your balanced assessment with questions from all levels..." />;
   }
 
   return (
@@ -38,10 +38,10 @@ const PlacementTest = () => {
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
             <Target className="h-5 w-5 text-blue-500" />
-            <span>Comprehensive English Assessment</span>
+            <span>Balanced English Assessment</span>
           </CardTitle>
           <CardDescription>
-            Take a balanced 15-question assessment covering all proficiency levels (A1-C2).
+            Take a carefully balanced assessment with questions from all proficiency levels (A1-C2).
           </CardDescription>
         </CardHeader>
 
@@ -64,20 +64,20 @@ const PlacementTest = () => {
               <Card className="bg-gradient-to-r from-blue-50 to-indigo-50">
                 <CardContent className="p-6">
                   <div className="flex items-center space-x-3 mb-4">
-                    <Award className="h-8 w-8 text-blue-500" />
+                    <BarChart3 className="h-8 w-8 text-blue-500" />
                     <div>
-                      <h3 className="font-semibold text-xl">Balanced Level Assessment</h3>
-                      <Badge className="bg-blue-100 text-blue-700 mt-1">All Levels A1-C2</Badge>
+                      <h3 className="font-semibold text-xl">Balanced Multi-Level Assessment</h3>
+                      <Badge className="bg-blue-100 text-blue-700 mt-1">Smart Question Distribution</Badge>
                     </div>
                   </div>
                   <ul className="space-y-3 text-gray-700">
                     <li className="flex items-center space-x-3">
                       <Clock className="h-5 w-5 text-blue-500" />
-                      <span><strong>Duration:</strong> 20 minutes (15 questions)</span>
+                      <span><strong>Duration:</strong> 20 minutes (15 carefully selected questions)</span>
                     </li>
                     <li className="flex items-center space-x-3">
-                      <Target className="h-5 w-5 text-blue-500" />
-                      <span><strong>Balanced:</strong> Questions from all proficiency levels</span>
+                      <BarChart3 className="h-5 w-5 text-blue-500" />
+                      <span><strong>Balanced:</strong> 2-3 questions from each level (A1, A2, B1, B2, C1, C2)</span>
                     </li>
                     <li className="flex items-center space-x-3">
                       <Brain className="h-5 w-5 text-blue-500" />
@@ -85,7 +85,7 @@ const PlacementTest = () => {
                     </li>
                     <li className="flex items-center space-x-3">
                       <Lightbulb className="h-5 w-5 text-blue-500" />
-                      <span><strong>Complete Review:</strong> Detailed feedback after completion</span>
+                      <span><strong>Complete Review:</strong> Detailed feedback and explanations after completion</span>
                     </li>
                     <li className="flex items-center space-x-3">
                       <Award className="h-5 w-5 text-blue-500" />
@@ -102,18 +102,18 @@ const PlacementTest = () => {
                   size="lg"
                   className="bg-blue-600 hover:bg-blue-700"
                 >
-                  {state.loading ? 'Loading...' : 'Start Assessment'}
+                  {state.loading ? 'Preparing Balanced Assessment...' : 'Start Balanced Assessment'}
                 </Button>
                 
                 <div className="border-t pt-4">
-                  <p className="text-sm text-gray-600 mb-2">Admin: Generate more questions for the database</p>
+                  <p className="text-sm text-gray-600 mb-2">Admin: Generate more questions to improve level balance</p>
                   <Button 
                     onClick={handleGenerateQuestions}
                     disabled={isGeneratingQuestions}
                     variant="outline"
                     size="sm"
                   >
-                    {isGeneratingQuestions ? 'Generating...' : 'Generate 200 Questions'}
+                    {isGeneratingQuestions ? 'Generating Balanced Questions...' : 'Generate 300 Questions'}
                   </Button>
                 </div>
               </div>
@@ -130,7 +130,7 @@ const PlacementTest = () => {
                       Question {state.currentQuestion + 1} of {state.questions.length}
                     </h3>
                     <Badge variant="outline" className="border-blue-200 text-blue-700">
-                      Assessment in Progress
+                      Balanced Assessment
                     </Badge>
                   </div>
                   <div className="flex items-center space-x-2 text-sm text-gray-500">
@@ -199,7 +199,7 @@ const PlacementTest = () => {
           )}
 
           {state.loading && state.testStarted && (
-            <LoadingState message="Evaluating your responses and calculating results..." />
+            <LoadingState message="Evaluating your responses across all proficiency levels..." />
           )}
 
           {state.testCompleted && state.testResults && (
@@ -213,8 +213,11 @@ const PlacementTest = () => {
                   </div>
                 </div>
                 <div>
-                  <h2 className="text-3xl font-bold text-gray-800 mb-2">Assessment Complete!</h2>
+                  <h2 className="text-3xl font-bold text-gray-800 mb-2">Balanced Assessment Complete!</h2>
                   <p className="text-lg text-gray-600">{state.testResults.detailedFeedback.message}</p>
+                  <Badge className="bg-green-100 text-green-700 mt-2">
+                    Questions from all proficiency levels analyzed
+                  </Badge>
                 </div>
                 
                 {/* Key Results */}
@@ -232,7 +235,7 @@ const PlacementTest = () => {
                       <div className="text-3xl font-bold text-green-700 mb-1">
                         {Math.round(state.testResults.score)}%
                       </div>
-                      <div className="text-sm text-green-600">Score</div>
+                      <div className="text-sm text-green-600">Overall Score</div>
                     </CardContent>
                   </Card>
                   <Card className="bg-gradient-to-br from-purple-50 to-purple-100">
@@ -245,6 +248,28 @@ const PlacementTest = () => {
                   </Card>
                 </div>
               </div>
+
+              {/* Level Performance Breakdown */}
+              {state.testResults.levelBreakdown && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center space-x-2">
+                      <BarChart3 className="h-5 w-5 text-blue-500" />
+                      <span>Performance by Level</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      {Object.entries(state.testResults.levelBreakdown).map(([level, correct]) => (
+                        <div key={level} className="text-center p-3 rounded-lg bg-gray-50">
+                          <div className="text-lg font-semibold text-gray-800">{level}</div>
+                          <div className="text-sm text-gray-600">{correct} correct</div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Detailed Results */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -323,7 +348,7 @@ const PlacementTest = () => {
                   <CardHeader>
                     <CardTitle className="flex items-center space-x-2">
                       <BookOpen className="h-5 w-5 text-blue-500" />
-                      <span>Question Review & Explanations</span>
+                      <span>Complete Question Review & Explanations</span>
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -338,6 +363,14 @@ const PlacementTest = () => {
                             </div>
                           )}
                           <div className="flex-1">
+                            <div className="flex items-center space-x-2 mb-2">
+                              <Badge variant="secondary" className="text-xs">
+                                {review.level}
+                              </Badge>
+                              <Badge variant="outline" className="text-xs">
+                                {review.topic}
+                              </Badge>
+                            </div>
                             <p className="font-medium mb-2">{review.question}</p>
                             <div className="text-sm space-y-1">
                               <p><strong>Your answer:</strong> {review.userAnswer}</p>

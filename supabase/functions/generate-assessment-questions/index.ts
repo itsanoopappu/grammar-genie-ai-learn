@@ -19,9 +19,62 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { action, count = 50, level = 'mixed' } = await req.json()
+    const { action, count = 200, level = 'mixed' } = await req.json()
 
     if (action === 'generate_questions') {
+      // First, check current question distribution
+      const { data: currentDistribution } = await supabaseClient
+        .from('test_questions')
+        .select('level')
+        .not('level', 'is', null)
+
+      const levelCounts = currentDistribution?.reduce((acc: any, q: any) => {
+        acc[q.level] = (acc[q.level] || 0) + 1;
+        return acc;
+      }, {}) || {};
+
+      console.log('Current question distribution:', levelCounts);
+
+      // Define target distribution - prioritize underrepresented levels
+      const minQuestionsPerLevel = 50;
+      const levels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+      const levelsNeedingQuestions = levels.filter(level => (levelCounts[level] || 0) < minQuestionsPerLevel);
+      
+      console.log('Levels needing more questions:', levelsNeedingQuestions);
+
+      // Calculate questions to generate per level
+      let questionsPerLevel: Record<string, number> = {};
+      
+      if (levelsNeedingQuestions.length > 0) {
+        // Prioritize underrepresented levels
+        const questionsForNeededLevels = Math.floor(count * 0.8); // 80% for needed levels
+        const questionsForOtherLevels = count - questionsForNeededLevels;
+        
+        levelsNeedingQuestions.forEach(level => {
+          const needed = minQuestionsPerLevel - (levelCounts[level] || 0);
+          questionsPerLevel[level] = Math.min(needed, Math.floor(questionsForNeededLevels / levelsNeedingQuestions.length));
+        });
+        
+        // Distribute remaining questions
+        const remainingQuestions = count - Object.values(questionsPerLevel).reduce((sum, count) => sum + count, 0);
+        if (remainingQuestions > 0) {
+          const remainingPerLevel = Math.floor(remainingQuestions / levels.length);
+          levels.forEach(level => {
+            questionsPerLevel[level] = (questionsPerLevel[level] || 0) + remainingPerLevel;
+          });
+        }
+      } else {
+        // Balanced distribution
+        const basePerLevel = Math.floor(count / levels.length);
+        const remainder = count % levels.length;
+        
+        levels.forEach((level, index) => {
+          questionsPerLevel[level] = basePerLevel + (index < remainder ? 1 : 0);
+        });
+      }
+
+      console.log('Planned question generation:', questionsPerLevel);
+
       // Define the corrected JSON schema for structured outputs
       const questionsSchema = {
         type: "object",
@@ -89,19 +142,11 @@ serve(async (req) => {
         additionalProperties: false
       }
 
-      console.log('Generating questions with balanced level distribution...')
-
-      // Calculate questions per level for balanced distribution
-      const levels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
-      const questionsPerLevel = Math.floor(count / levels.length);
-      const remainingQuestions = count % levels.length;
-
       let allQuestions: any[] = [];
 
       // Generate questions for each level
-      for (let i = 0; i < levels.length; i++) {
-        const currentLevel = levels[i];
-        const questionsForThisLevel = questionsPerLevel + (i < remainingQuestions ? 1 : 0);
+      for (const [currentLevel, questionsForThisLevel] of Object.entries(questionsPerLevel)) {
+        if (questionsForThisLevel === 0) continue;
         
         console.log(`Generating ${questionsForThisLevel} questions for level ${currentLevel}`);
 
@@ -132,7 +177,15 @@ Focus on these grammar topics: tenses, conditionals, passive voice, reported spe
 
 Ensure questions test practical language use, not just theoretical knowledge.
 
-IMPORTANT: ALL questions must be exactly ${currentLevel} level. Do not generate questions for other levels.`
+CRITICAL: ALL questions must be exactly ${currentLevel} level. Do not generate questions for other levels.
+
+For ${currentLevel} level:
+${currentLevel === 'A1' ? '- Basic present/past tense, simple vocabulary, basic sentence structure' : ''}
+${currentLevel === 'A2' ? '- Present perfect, future tense, basic conditionals, everyday vocabulary' : ''}
+${currentLevel === 'B1' ? '- Complex tenses, intermediate conditionals, passive voice basics, wider vocabulary' : ''}
+${currentLevel === 'B2' ? '- Advanced conditionals, complex passive voice, reported speech, sophisticated vocabulary' : ''}
+${currentLevel === 'C1' ? '- Nuanced grammar, advanced vocabulary, complex sentence structures, subtle distinctions' : ''}
+${currentLevel === 'C2' ? '- Expert-level grammar, sophisticated vocabulary, native-like distinctions, literary language' : ''}`
               },
               {
                 role: 'user',
@@ -214,17 +267,31 @@ IMPORTANT: ALL questions must be exactly ${currentLevel} level. Do not generate 
       console.log('Successfully inserted questions into database:', insertedQuestions?.length);
 
       // Log level distribution
-      const levelCounts = insertedQuestions?.reduce((acc: any, q: any) => {
+      const finalLevelCounts = insertedQuestions?.reduce((acc: any, q: any) => {
         acc[q.level] = (acc[q.level] || 0) + 1;
         return acc;
       }, {});
-      console.log('Level distribution:', levelCounts);
+      console.log('Generated level distribution:', finalLevelCounts);
+
+      // Get updated total distribution
+      const { data: updatedDistribution } = await supabaseClient
+        .from('test_questions')
+        .select('level')
+        .not('level', 'is', null)
+
+      const updatedLevelCounts = updatedDistribution?.reduce((acc: any, q: any) => {
+        acc[q.level] = (acc[q.level] || 0) + 1;
+        return acc;
+      }, {}) || {};
+
+      console.log('Updated total database distribution:', updatedLevelCounts);
 
       return new Response(
         JSON.stringify({ 
           success: true,
           questionsGenerated: allQuestions.length,
-          levelDistribution: levelCounts,
+          levelDistribution: finalLevelCounts,
+          totalDatabaseDistribution: updatedLevelCounts,
           questions: insertedQuestions
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
