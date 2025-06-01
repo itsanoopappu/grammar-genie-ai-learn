@@ -1,3 +1,4 @@
+
 import { atom, useAtom } from 'jotai';
 import { produce } from 'immer';
 import { supabase } from '@/integrations/supabase/client';
@@ -20,10 +21,13 @@ interface Question {
 
 interface TestResults {
   score: number;
+  weightedScore?: number;
+  totalPossibleScore?: number;
   total?: number;
   recommendedLevel: string;
+  confidence?: number;
   topicPerformance: Record<string, { correct: number; total: number }>;
-  levelBreakdown: Record<string, number>;
+  levelBreakdown: Record<string, number> | Record<string, { correct: number; total: number; points: number }>;
   weaknesses: string[];
   strengths: string[];
   xpEarned: number;
@@ -47,6 +51,7 @@ interface TestState {
   error: string | null;
   timeSpent: number;
   startTime: Date | null;
+  assessmentType: 'comprehensive' | 'adaptive';
 }
 
 const initialState: TestState = {
@@ -61,7 +66,8 @@ const initialState: TestState = {
   loading: false,
   error: null,
   timeSpent: 0,
-  startTime: null
+  startTime: null,
+  assessmentType: 'comprehensive'
 };
 
 const testStateAtom = atom<TestState>(initialState);
@@ -71,17 +77,19 @@ export const usePlacementTestLogic = () => {
   const { user } = useAuth();
   const { profile, updateProfile } = useProfile();
 
-  const startTest = async () => {
+  const startTest = async (assessmentType: 'comprehensive' | 'adaptive' = 'comprehensive') => {
     setState(produce(state => { 
       state.loading = true;
       state.error = null;
+      state.assessmentType = assessmentType;
     }));
 
     try {
       const { data, error } = await supabase.functions.invoke('placement-test', {
         body: { 
           action: 'start_assessment',
-          user_id: user?.id
+          user_id: user?.id,
+          assessment_type: assessmentType
         }
       });
 
@@ -116,8 +124,7 @@ export const usePlacementTestLogic = () => {
     try {
       const currentQuestion = state.questions[state.currentQuestion];
       
-      // Submit answer without getting immediate feedback
-      const { error } = await supabase.functions.invoke('placement-test', {
+      const { data, error } = await supabase.functions.invoke('placement-test', {
         body: { 
           action: 'submit_answer',
           user_id: user?.id,

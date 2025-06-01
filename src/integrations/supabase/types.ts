@@ -412,8 +412,11 @@ export type Database = {
       }
       placement_tests: {
         Row: {
+          adaptive_difficulty_progression: Json | null
           assessment_type: string | null
           completed_at: string | null
+          confidence_score: number | null
+          current_difficulty_level: string | null
           id: string
           immediate_feedback: boolean | null
           level: string | null
@@ -421,10 +424,14 @@ export type Database = {
           started_at: string | null
           total_questions: number | null
           user_id: string | null
+          weighted_score: number | null
         }
         Insert: {
+          adaptive_difficulty_progression?: Json | null
           assessment_type?: string | null
           completed_at?: string | null
+          confidence_score?: number | null
+          current_difficulty_level?: string | null
           id?: string
           immediate_feedback?: boolean | null
           level?: string | null
@@ -432,10 +439,14 @@ export type Database = {
           started_at?: string | null
           total_questions?: number | null
           user_id?: string | null
+          weighted_score?: number | null
         }
         Update: {
+          adaptive_difficulty_progression?: Json | null
           assessment_type?: string | null
           completed_at?: string | null
+          confidence_score?: number | null
+          current_difficulty_level?: string | null
           id?: string
           immediate_feedback?: boolean | null
           level?: string | null
@@ -443,6 +454,7 @@ export type Database = {
           started_at?: string | null
           total_questions?: number | null
           user_id?: string | null
+          weighted_score?: number | null
         }
         Relationships: [
           {
@@ -729,25 +741,37 @@ export type Database = {
       }
       user_question_history: {
         Row: {
+          answered_at: string | null
           id: string
+          is_correct: boolean | null
           question_id: string
           seen_at: string
           test_id: string | null
+          user_answer: string | null
           user_id: string
+          weighted_points: number | null
         }
         Insert: {
+          answered_at?: string | null
           id?: string
+          is_correct?: boolean | null
           question_id: string
           seen_at?: string
           test_id?: string | null
+          user_answer?: string | null
           user_id: string
+          weighted_points?: number | null
         }
         Update: {
+          answered_at?: string | null
           id?: string
+          is_correct?: boolean | null
           question_id?: string
           seen_at?: string
           test_id?: string | null
+          user_answer?: string | null
           user_id?: string
+          weighted_points?: number | null
         }
         Relationships: [
           {
@@ -821,6 +845,27 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_adaptive_questions_for_user: {
+        Args: {
+          p_user_id: string
+          p_current_level?: string
+          p_limit?: number
+          p_exclude_question_ids?: string[]
+        }
+        Returns: {
+          id: string
+          question: string
+          options: Json
+          correct_answer: string
+          topic: string
+          level: string
+          explanation: string
+          detailed_explanation: string
+          first_principles_explanation: string
+          wrong_answer_explanations: Json
+          difficulty_score: number
+        }[]
+      }
       get_unseen_questions_for_user: {
         Args: { p_user_id: string; p_limit?: number }
         Returns: {
