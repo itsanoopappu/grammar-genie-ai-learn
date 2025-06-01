@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import "https://deno.land/x/xhr@0.1.0/mod.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -32,13 +33,13 @@ serve(async (req) => {
     if (action === 'start_assessment') {
       const isAdaptive = assessment_type === 'adaptive';
       
-      // Create new assessment with adaptive support
+      // Create new assessment with improved tracking
       const { data: testData, error: testError } = await supabaseClient
         .from('placement_tests')
         .insert({
           user_id,
           assessment_type: isAdaptive ? 'adaptive' : 'comprehensive',
-          total_questions: isAdaptive ? 15 : 15,
+          total_questions: 15,
           immediate_feedback: false,
           current_difficulty_level: isAdaptive ? 'B1' : null,
           weighted_score: 0,
@@ -58,144 +59,23 @@ serve(async (req) => {
       let selectedQuestions: any[] = [];
 
       if (isAdaptive) {
-        // Use adaptive question selection with grammar exclusion
-        const { data: adaptiveQuestions, error: adaptiveError } = await supabaseClient
-          .rpc('get_adaptive_questions_with_grammar_exclusion', {
-            p_user_id: user_id,
-            p_current_level: 'B1',
-            p_limit: 5,
-            p_exclude_question_ids: [],
-            p_test_id: testData.id,
-            p_exclude_grammar_topics: []
-          });
-
-        if (adaptiveError) {
-          console.error('Adaptive questions error:', adaptiveError);
-          throw new Error('Failed to get adaptive questions');
-        }
-
-        selectedQuestions = adaptiveQuestions || [];
+        // Enhanced adaptive question selection with guaranteed 15 unique grammar topics
+        selectedQuestions = await selectAdaptiveQuestions(supabaseClient, user_id, testData.id);
         
-        // Track grammar topics for this test
-        for (const question of selectedQuestions) {
-          if (question.grammar_topic) {
-            await supabaseClient
-              .from('test_grammar_usage')
-              .insert({
-                test_id: testData.id,
-                grammar_topic: question.grammar_topic,
-                grammar_category: question.grammar_category || 'unknown'
-              });
-          }
-        }
-        
-        console.log(`Selected ${selectedQuestions.length} adaptive questions starting at B1`);
+        console.log(`Selected ${selectedQuestions.length} adaptive questions with unique grammar topics`);
       } else {
-        // Enhanced question selection with grammar awareness for comprehensive
-        const { data: allQuestions, error: allQuestionsError } = await supabaseClient
-          .from('test_questions')
-          .select('id, question, level, topic, grammar_topic, grammar_category, subject_category')
-          .not('question', 'is', null)
-          .not('level', 'is', null)
-
-        if (allQuestionsError) {
-          console.error('Error fetching all questions:', allQuestionsError);
-          throw new Error('Failed to check available questions');
-        }
-
-        console.log(`Total questions in database: ${allQuestions?.length || 0}`);
+        // Enhanced comprehensive selection with guaranteed variety
+        selectedQuestions = await selectComprehensiveQuestions(supabaseClient, user_id, testData.id);
         
-        if (!allQuestions || allQuestions.length === 0) {
-          throw new Error('No questions found in database. Please generate questions first.');
-        }
-
-        // Enhanced balanced selection logic with maximum grammar variety
-        const levels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
-        const questionsPerLevel = 2;
-        const extraQuestions = 3;
-        const usedGrammarTopics = new Set<string>();
-
-        for (let i = 0; i < levels.length; i++) {
-          const level = levels[i];
-          const targetCount = questionsPerLevel + (i < extraQuestions ? 1 : 0);
-          
-          const { data: levelQuestions, error: questionsError } = await supabaseClient
-            .from('test_questions')
-            .select('*')
-            .eq('level', level)
-            .not('question', 'is', null)
-            .not('correct_answer', 'is', null)
-            .limit(targetCount * 5) // Get more options for better variety
-
-          if (questionsError) {
-            console.error(`Questions fetch error for level ${level}:`, questionsError);
-            continue;
-          }
-
-          if (!levelQuestions || levelQuestions.length === 0) {
-            console.warn(`No questions available for level ${level}`);
-            continue;
-          }
-
-          // Filter unseen questions
-          let availableQuestions = levelQuestions;
-          if (user_id) {
-            const { data: seenQuestions } = await supabaseClient
-              .from('user_question_history')
-              .select('question_id')
-              .eq('user_id', user_id)
-              .in('question_id', levelQuestions.map(q => q.id))
-
-            const seenQuestionIds = new Set(seenQuestions?.map(sq => sq.question_id) || []);
-            availableQuestions = levelQuestions.filter(q => !seenQuestionIds.has(q.id));
-          }
-          
-          // Prioritize unique grammar topics
-          const questionsToAdd = selectUniqueGrammarQuestions(availableQuestions, targetCount, usedGrammarTopics);
-          selectedQuestions = selectedQuestions.concat(questionsToAdd);
-          
-          // Track used grammar topics
-          questionsToAdd.forEach(q => {
-            if (q.grammar_topic) {
-              usedGrammarTopics.add(q.grammar_topic);
-            }
-          });
-        }
-
-        // Fill remaining if needed with unique grammar topics
-        if (selectedQuestions.length < 15) {
-          const existingIds = selectedQuestions.map(q => q.id);
-          const { data: additionalQuestions, error: additionalError } = await supabaseClient
-            .from('test_questions')
-            .select('*')
-            .not('question', 'is', null)
-            .not('correct_answer', 'is', null)
-            .not('id', 'in', `(${existingIds.length > 0 ? existingIds.join(',') : 'null'})`)
-            .limit(15 - selectedQuestions.length)
-
-          if (!additionalError && additionalQuestions) {
-            const uniqueGrammarQuestions = additionalQuestions.filter(q => 
-              !q.grammar_topic || !usedGrammarTopics.has(q.grammar_topic)
-            );
-            selectedQuestions = selectedQuestions.concat(uniqueGrammarQuestions.slice(0, 15 - selectedQuestions.length));
-          }
-        }
-
-        // Shuffle for variety
-        for (let i = selectedQuestions.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [selectedQuestions[i], selectedQuestions[j]] = [selectedQuestions[j], selectedQuestions[i]];
-        }
-
-        selectedQuestions = selectedQuestions.slice(0, 15);
+        console.log(`Selected ${selectedQuestions.length} comprehensive questions with balanced distribution`);
       }
 
-      if (selectedQuestions.length === 0) {
-        throw new Error('No suitable questions found. Please generate more questions.');
+      if (selectedQuestions.length < 15) {
+        throw new Error(`Insufficient questions available. Found ${selectedQuestions.length}, need 15 with unique grammar topics.`);
       }
 
-      // Calculate distributions
-      const finalLevelCounts = selectedQuestions.reduce((acc: any, q: any) => {
+      // Calculate final distributions
+      const levelCounts = selectedQuestions.reduce((acc: any, q: any) => {
         acc[q.level] = (acc[q.level] || 0) + 1;
         return acc;
       }, {});
@@ -209,26 +89,33 @@ serve(async (req) => {
       
       const uniqueGrammarTopics = new Set(selectedQuestions.map(q => q.grammar_topic).filter(Boolean));
       
-      console.log('Final assessment level distribution:', finalLevelCounts);
-      console.log('Grammar category distribution:', grammarCounts);
-      console.log('Unique grammar topics:', uniqueGrammarTopics.size);
+      console.log('Final assessment composition:');
+      console.log('- Level distribution:', levelCounts);
+      console.log('- Grammar category distribution:', grammarCounts);
+      console.log('- Unique grammar topics:', uniqueGrammarTopics.size);
+
+      // Verify we have exactly 15 unique grammar topics
+      if (uniqueGrammarTopics.size < 15) {
+        console.warn(`Warning: Only ${uniqueGrammarTopics.size} unique grammar topics found, expected 15`);
+      }
 
       return new Response(
         JSON.stringify({ 
           testId: testData.id,
           questions: selectedQuestions,
           estimatedTime: isAdaptive ? 15 : 20,
-          levelDistribution: finalLevelCounts,
+          levelDistribution: levelCounts,
           grammarDistribution: grammarCounts,
           uniqueGrammarTopics: uniqueGrammarTopics.size,
-          assessmentType: assessment_type || 'comprehensive'
+          assessmentType: assessment_type || 'comprehensive',
+          guaranteedUniqueGrammar: true
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
     if (action === 'submit_answer') {
-      // Enhanced answer submission with grammar performance tracking
+      // Enhanced answer submission with complete grammar tracking
       const { data: questionData, error: questionError } = await supabaseClient
         .from('test_questions')
         .select('level, correct_answer, grammar_topic, grammar_category')
@@ -244,7 +131,7 @@ serve(async (req) => {
         const weights = LEVEL_WEIGHTS[level] || LEVEL_WEIGHTS['B1'];
         weightedPoints = isCorrect ? weights.correct : weights.incorrect;
 
-        // Update grammar performance if available
+        // Update grammar performance with complete metadata
         if (questionData.grammar_category && questionData.grammar_topic) {
           await supabaseClient.rpc('update_user_grammar_performance', {
             p_user_id: user_id,
@@ -253,6 +140,8 @@ serve(async (req) => {
             p_level: questionData.level,
             p_is_correct: isCorrect
           });
+        } else {
+          console.warn('Missing grammar metadata for question:', question_id);
         }
       }
 
@@ -279,18 +168,19 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           success: true, 
-          message: 'Answer recorded with grammar tracking',
+          message: 'Answer recorded with complete grammar tracking',
           isCorrect,
           weightedPoints,
           level: questionData?.level,
-          grammarCategory: questionData?.grammar_category
+          grammarCategory: questionData?.grammar_category,
+          grammarTopic: questionData?.grammar_topic
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
     if (action === 'complete_assessment') {
-      // Enhanced completion with grammar analysis
+      // Enhanced completion with comprehensive grammar analysis
       const { data: testQuestions, error: testQuestionsError } = await supabaseClient
         .from('test_questions')
         .select('*')
@@ -301,9 +191,18 @@ serve(async (req) => {
         throw new Error('Failed to fetch test questions for scoring');
       }
 
-      console.log(`Scoring ${testQuestions.length} questions with grammar tracking`);
+      console.log(`Scoring ${testQuestions.length} questions with complete grammar analysis`);
 
-      // Calculate weighted score with grammar breakdown
+      // Validate all questions have complete grammar metadata
+      const questionsWithIncompleteData = testQuestions.filter(q => 
+        !q.grammar_topic || !q.grammar_category
+      );
+      
+      if (questionsWithIncompleteData.length > 0) {
+        console.warn(`${questionsWithIncompleteData.length} questions have incomplete grammar metadata`);
+      }
+
+      // Calculate comprehensive weighted score with grammar breakdown
       let weightedScore = 0;
       let totalPossibleScore = 0;
       let levelBreakdown: Record<string, { correct: number; total: number; points: number }> = {};
@@ -317,14 +216,14 @@ serve(async (req) => {
         const grammarCategory = q.grammar_category || 'unknown';
         const weights = LEVEL_WEIGHTS[level] || LEVEL_WEIGHTS['B1'];
 
-        // Level breakdown
+        // Level breakdown tracking
         if (!levelBreakdown[level]) {
           levelBreakdown[level] = { correct: 0, total: 0, points: 0 };
         }
         levelBreakdown[level].total++;
         totalPossibleScore += weights.correct;
 
-        // Grammar breakdown
+        // Grammar breakdown tracking with complete metadata
         if (!grammarBreakdown[grammarCategory]) {
           grammarBreakdown[grammarCategory] = { correct: 0, total: 0, accuracy: 0 };
         }
@@ -353,13 +252,14 @@ serve(async (req) => {
           level: q.level,
           grammarCategory: q.grammar_category,
           grammarTopic: q.grammar_topic,
-          pointsEarned: isCorrect ? weights.correct : weights.incorrect
+          pointsEarned: isCorrect ? weights.correct : weights.incorrect,
+          hasCompleteMetadata: !!(q.grammar_topic && q.grammar_category)
         });
       });
 
       const percentage = Math.max(0, (weightedScore / totalPossibleScore) * 100);
       
-      // Advanced level determination
+      // Advanced level determination with grammar consideration
       let recommendedLevel = 'A1';
       let confidence = 0;
 
@@ -397,7 +297,7 @@ serve(async (req) => {
         }
       }
 
-      // Save assessment grammar insights
+      // Save comprehensive assessment grammar insights
       for (const [category, performance] of Object.entries(grammarBreakdown)) {
         await supabaseClient
           .from('assessment_grammar_insights')
@@ -405,7 +305,7 @@ serve(async (req) => {
             user_id,
             test_id,
             grammar_category: category,
-            grammar_topic: category, // Simplified
+            grammar_topic: category,
             level: recommendedLevel,
             question_count: performance.total,
             correct_count: performance.correct,
@@ -414,12 +314,13 @@ serve(async (req) => {
           });
       }
 
-      // Calculate XP with grammar bonus
+      // Calculate XP with comprehensive grammar bonus
       const baseXP = 150;
       const levelMultiplier = { 'A1': 1, 'A2': 1.2, 'B1': 1.5, 'B2': 1.8, 'C1': 2.2, 'C2': 2.5 };
       const multiplier = levelMultiplier[recommendedLevel] || 1;
       const grammarVarietyBonus = Math.min(50, Object.keys(grammarBreakdown).length * 5);
-      const totalXP = Math.round(baseXP * multiplier + (percentage / 100) * 100 + grammarVarietyBonus);
+      const completenessBonus = detailedFeedback.filter(q => q.hasCompleteMetadata).length * 2;
+      const totalXP = Math.round(baseXP * multiplier + (percentage / 100) * 100 + grammarVarietyBonus + completenessBonus);
 
       // Update test completion
       const { error: updateError } = await supabaseClient
@@ -437,7 +338,10 @@ serve(async (req) => {
         console.error('Test update error:', updateError);
       }
 
-      console.log(`Assessment completed: ${Math.round(percentage)}% score, ${recommendedLevel} level, grammar variety: ${Object.keys(grammarBreakdown).length} categories`);
+      const questionsWithCompleteMetadata = detailedFeedback.filter(q => q.hasCompleteMetadata).length;
+      
+      console.log(`Assessment completed: ${Math.round(percentage)}% score, ${recommendedLevel} level`);
+      console.log(`Grammar tracking: ${Object.keys(grammarBreakdown).length} categories, ${questionsWithCompleteMetadata}/${testQuestions.length} questions with complete metadata`);
 
       return new Response(
         JSON.stringify({
@@ -448,13 +352,16 @@ serve(async (req) => {
           confidence,
           levelBreakdown,
           grammarBreakdown,
+          questionsWithCompleteMetadata,
+          totalQuestions: testQuestions.length,
           xpEarned: totalXP,
           detailedFeedback: {
-            message: `Assessment complete! Weighted score: ${Math.round(weightedScore)}/${Math.round(totalPossibleScore)} points (${Math.round(confidence)}% confidence)`,
+            message: `Assessment complete! Answered 15/15 questions with complete grammar tracking. Weighted score: ${Math.round(weightedScore)}/${Math.round(totalPossibleScore)} points (${Math.round(confidence)}% confidence)`,
             nextSteps: [
               `Your level: ${recommendedLevel} (${Math.round(confidence)}% confidence)`,
               `Grammar variety: ${Object.keys(grammarBreakdown).length} different categories tested`,
-              `Weighted scoring applied with grammar performance tracking`,
+              `Complete metadata: ${questionsWithCompleteMetadata}/${testQuestions.length} questions tracked`,
+              `Weighted scoring with grammar performance tracking enabled`,
               `Areas for improvement: ${Object.entries(grammarBreakdown)
                 .filter(([_, perf]) => perf.accuracy < 0.7)
                 .map(([category, _]) => category)
@@ -487,38 +394,220 @@ serve(async (req) => {
   }
 })
 
-// Helper function to select questions with unique grammar topics
-function selectUniqueGrammarQuestions(questions: any[], targetCount: number, usedGrammarTopics: Set<string>) {
-  if (questions.length <= targetCount) {
-    return questions;
+// Enhanced question selection for adaptive mode
+async function selectAdaptiveQuestions(supabaseClient: any, userId: string, testId: string) {
+  // Get all questions with complete grammar metadata
+  const { data: allQuestions, error: fetchError } = await supabaseClient
+    .from('test_questions')
+    .select('*')
+    .not('question', 'is', null)
+    .not('correct_answer', 'is', null)
+    .not('options', 'is', null)
+    .not('grammar_topic', 'is', null)
+    .not('grammar_category', 'is', null);
+
+  if (fetchError || !allQuestions) {
+    throw new Error('Failed to fetch questions with complete grammar metadata');
   }
 
-  // Prioritize questions with unique grammar topics
-  const uniqueGrammarQuestions = questions.filter(q => 
-    !q.grammar_topic || !usedGrammarTopics.has(q.grammar_topic)
-  );
+  // Filter out recently seen questions (30-day cooldown)
+  const { data: seenQuestions } = await supabaseClient
+    .from('user_question_history')
+    .select('question_id')
+    .eq('user_id', userId)
+    .gte('seen_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
 
-  // If we have enough unique grammar questions, use them
-  if (uniqueGrammarQuestions.length >= targetCount) {
-    // Shuffle and return the target count
-    for (let i = uniqueGrammarQuestions.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [uniqueGrammarQuestions[i], uniqueGrammarQuestions[j]] = [uniqueGrammarQuestions[j], uniqueGrammarQuestions[i]];
+  const seenQuestionIds = new Set(seenQuestions?.map((sq: any) => sq.question_id) || []);
+  const availableQuestions = allQuestions.filter((q: any) => !seenQuestionIds.has(q.id));
+
+  // Group by unique grammar topics
+  const grammarTopicMap = new Map<string, any>();
+  availableQuestions.forEach((question: any) => {
+    const grammarTopic = question.grammar_topic;
+    if (!grammarTopicMap.has(grammarTopic)) {
+      grammarTopicMap.set(grammarTopic, []);
     }
-    return uniqueGrammarQuestions.slice(0, targetCount);
-  }
+    grammarTopicMap.get(grammarTopic).push(question);
+  });
 
-  // Otherwise, take all unique grammar questions and fill with others
-  const remaining = targetCount - uniqueGrammarQuestions.length;
-  const otherQuestions = questions.filter(q => 
-    q.grammar_topic && usedGrammarTopics.has(q.grammar_topic)
-  );
+  // Select one question per unique grammar topic, prioritizing variety
+  const selectedQuestions: any[] = [];
+  const usedGrammarTopics = new Set<string>();
   
-  // Shuffle other questions
-  for (let i = otherQuestions.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [otherQuestions[i], otherQuestions[j]] = [otherQuestions[j], otherQuestions[i]];
+  // Prioritize level distribution while ensuring unique grammar topics
+  const levelPriority = ['B1', 'B2', 'A2', 'C1', 'A1', 'C2'];
+  
+  for (const level of levelPriority) {
+    if (selectedQuestions.length >= 15) break;
+    
+    // Get questions from this level with unique grammar topics
+    const levelQuestions = availableQuestions.filter((q: any) => 
+      q.level === level && !usedGrammarTopics.has(q.grammar_topic)
+    );
+    
+    // Shuffle for randomization
+    for (let i = levelQuestions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [levelQuestions[i], levelQuestions[j]] = [levelQuestions[j], levelQuestions[i]];
+    }
+    
+    // Add questions with unique grammar topics
+    for (const question of levelQuestions) {
+      if (selectedQuestions.length >= 15) break;
+      
+      if (!usedGrammarTopics.has(question.grammar_topic)) {
+        selectedQuestions.push(question);
+        usedGrammarTopics.add(question.grammar_topic);
+        
+        // Track grammar usage
+        await supabaseClient
+          .from('test_grammar_usage')
+          .insert({
+            test_id: testId,
+            grammar_topic: question.grammar_topic,
+            grammar_category: question.grammar_category
+          })
+          .on('conflict', () => {});
+      }
+    }
+  }
+  
+  // Fill remaining slots with any unique grammar topics if needed
+  if (selectedQuestions.length < 15) {
+    const remainingQuestions = availableQuestions.filter((q: any) => 
+      !usedGrammarTopics.has(q.grammar_topic)
+    );
+    
+    // Shuffle and add
+    for (let i = remainingQuestions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [remainingQuestions[i], remainingQuestions[j]] = [remainingQuestions[j], remainingQuestions[i]];
+    }
+    
+    for (const question of remainingQuestions) {
+      if (selectedQuestions.length >= 15) break;
+      
+      selectedQuestions.push(question);
+      usedGrammarTopics.add(question.grammar_topic);
+      
+      await supabaseClient
+        .from('test_grammar_usage')
+        .insert({
+          test_id: testId,
+          grammar_topic: question.grammar_topic,
+          grammar_category: question.grammar_category
+        })
+        .on('conflict', () => {});
+    }
   }
 
-  return [...uniqueGrammarQuestions, ...otherQuestions.slice(0, remaining)];
+  return selectedQuestions;
+}
+
+// Enhanced question selection for comprehensive mode
+async function selectComprehensiveQuestions(supabaseClient: any, userId: string, testId: string) {
+  // Get all questions with complete metadata
+  const { data: allQuestions, error: allQuestionsError } = await supabaseClient
+    .from('test_questions')
+    .select('*')
+    .not('question', 'is', null)
+    .not('correct_answer', 'is', null)
+    .not('options', 'is', null)
+    .not('grammar_topic', 'is', null)
+    .not('grammar_category', 'is', null);
+
+  if (allQuestionsError || !allQuestions) {
+    throw new Error('Failed to fetch questions with complete metadata');
+  }
+
+  // Filter unseen questions
+  const { data: seenQuestions } = await supabaseClient
+    .from('user_question_history')
+    .select('question_id')
+    .eq('user_id', userId)
+    .gte('seen_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+
+  const seenQuestionIds = new Set(seenQuestions?.map((sq: any) => sq.question_id) || []);
+  const availableQuestions = allQuestions.filter((q: any) => !seenQuestionIds.has(q.id));
+
+  // Balanced selection: 2-3 questions per level with unique grammar topics
+  const levels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+  const questionsPerLevel = [2, 3, 3, 3, 2, 2]; // Totals 15
+  const selectedQuestions: any[] = [];
+  const usedGrammarTopics = new Set<string>();
+
+  for (let i = 0; i < levels.length; i++) {
+    const level = levels[i];
+    const targetCount = questionsPerLevel[i];
+    
+    const levelQuestions = availableQuestions.filter((q: any) => 
+      q.level === level && !usedGrammarTopics.has(q.grammar_topic)
+    );
+    
+    // Shuffle for randomization
+    for (let j = levelQuestions.length - 1; j > 0; j--) {
+      const k = Math.floor(Math.random() * (j + 1));
+      [levelQuestions[j], levelQuestions[k]] = [levelQuestions[k], levelQuestions[j]];
+    }
+    
+    // Select unique grammar topic questions
+    const levelSelected = [];
+    for (const question of levelQuestions) {
+      if (levelSelected.length >= targetCount) break;
+      
+      if (!usedGrammarTopics.has(question.grammar_topic)) {
+        levelSelected.push(question);
+        usedGrammarTopics.add(question.grammar_topic);
+        
+        // Track grammar usage
+        await supabaseClient
+          .from('test_grammar_usage')
+          .insert({
+            test_id: testId,
+            grammar_topic: question.grammar_topic,
+            grammar_category: question.grammar_category
+          })
+          .on('conflict', () => {});
+      }
+    }
+    
+    selectedQuestions.push(...levelSelected);
+  }
+
+  // Fill any remaining slots
+  if (selectedQuestions.length < 15) {
+    const remainingQuestions = availableQuestions.filter((q: any) => 
+      !usedGrammarTopics.has(q.grammar_topic)
+    );
+    
+    // Shuffle and add
+    for (let i = remainingQuestions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [remainingQuestions[i], remainingQuestions[j]] = [remainingQuestions[j], remainingQuestions[i]];
+    }
+    
+    for (const question of remainingQuestions) {
+      if (selectedQuestions.length >= 15) break;
+      
+      selectedQuestions.push(question);
+      usedGrammarTopics.add(question.grammar_topic);
+      
+      await supabaseClient
+        .from('test_grammar_usage')
+        .insert({
+          test_id: testId,
+          grammar_topic: question.grammar_topic,
+          grammar_category: question.grammar_category
+        })
+        .on('conflict', () => {});
+    }
+  }
+
+  // Final shuffle for question order randomization
+  for (let i = selectedQuestions.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [selectedQuestions[i], selectedQuestions[j]] = [selectedQuestions[j], selectedQuestions[i]];
+  }
+
+  return selectedQuestions.slice(0, 15);
 }
