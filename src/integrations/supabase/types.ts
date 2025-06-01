@@ -630,6 +630,36 @@ export type Database = {
           },
         ]
       }
+      used_topics: {
+        Row: {
+          cef_level: string
+          created_at: string | null
+          id: string
+          last_used_at: string | null
+          questions_generated: number | null
+          topic_category: string
+          topic_name: string
+        }
+        Insert: {
+          cef_level: string
+          created_at?: string | null
+          id?: string
+          last_used_at?: string | null
+          questions_generated?: number | null
+          topic_category: string
+          topic_name: string
+        }
+        Update: {
+          cef_level?: string
+          created_at?: string | null
+          id?: string
+          last_used_at?: string | null
+          questions_generated?: number | null
+          topic_category?: string
+          topic_name?: string
+        }
+        Relationships: []
+      }
       user_achievements: {
         Row: {
           achievement_id: string | null
