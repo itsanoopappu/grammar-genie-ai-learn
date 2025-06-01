@@ -1,4 +1,3 @@
-
 import { atom, useAtom } from 'jotai';
 import { produce } from 'immer';
 import { supabase } from '@/integrations/supabase/client';
@@ -206,7 +205,7 @@ export const usePlacementTestLogic = () => {
     setState(produce(state => { state.selectedAnswer = answer }));
   };
 
-  const generateQuestions = async (count: number = 100, level: string = 'mixed') => {
+  const generateQuestions = async (count: number = 30, level: string = 'mixed') => {
     try {
       const { data, error } = await supabase.functions.invoke('generate-assessment-questions', {
         body: { 

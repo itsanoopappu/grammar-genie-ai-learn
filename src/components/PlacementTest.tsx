@@ -19,8 +19,8 @@ const PlacementTest = () => {
   const handleGenerateQuestions = async () => {
     setIsGeneratingQuestions(true);
     try {
-      await generateQuestions(300, 'mixed'); // Generate more questions to balance database
-      alert('Successfully generated 300 new assessment questions with balanced level distribution!');
+      await generateQuestions(30, 'mixed'); // Generate 30 questions (5 per level)
+      alert('Successfully generated 30 new assessment questions (5 per level A1-C2)!');
     } catch (error) {
       alert('Failed to generate questions. Please ensure your OpenAI API key is configured.');
     } finally {
@@ -106,14 +106,14 @@ const PlacementTest = () => {
                 </Button>
                 
                 <div className="border-t pt-4">
-                  <p className="text-sm text-gray-600 mb-2">Admin: Generate more questions to improve level balance</p>
+                  <p className="text-sm text-gray-600 mb-2">Admin: Generate 30 questions (5 per level)</p>
                   <Button 
                     onClick={handleGenerateQuestions}
                     disabled={isGeneratingQuestions}
                     variant="outline"
                     size="sm"
                   >
-                    {isGeneratingQuestions ? 'Generating Balanced Questions...' : 'Generate 300 Questions'}
+                    {isGeneratingQuestions ? 'Generating 30 Questions...' : 'Generate 30 Questions (5 per level)'}
                   </Button>
                 </div>
               </div>

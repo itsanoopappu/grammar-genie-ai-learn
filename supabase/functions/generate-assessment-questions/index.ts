@@ -19,61 +19,14 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { action, count = 200, level = 'mixed' } = await req.json()
+    const { action, count = 30, level = 'mixed' } = await req.json()
 
     if (action === 'generate_questions') {
-      // First, check current question distribution
-      const { data: currentDistribution } = await supabaseClient
-        .from('test_questions')
-        .select('level')
-        .not('level', 'is', null)
-
-      const levelCounts = currentDistribution?.reduce((acc: any, q: any) => {
-        acc[q.level] = (acc[q.level] || 0) + 1;
-        return acc;
-      }, {}) || {};
-
-      console.log('Current question distribution:', levelCounts);
-
-      // Define target distribution - prioritize underrepresented levels
-      const minQuestionsPerLevel = 50;
+      // Fixed distribution: 5 questions per level for 6 levels = 30 total
       const levels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
-      const levelsNeedingQuestions = levels.filter(level => (levelCounts[level] || 0) < minQuestionsPerLevel);
-      
-      console.log('Levels needing more questions:', levelsNeedingQuestions);
+      const questionsPerLevel = 5;
 
-      // Calculate questions to generate per level
-      let questionsPerLevel: Record<string, number> = {};
-      
-      if (levelsNeedingQuestions.length > 0) {
-        // Prioritize underrepresented levels
-        const questionsForNeededLevels = Math.floor(count * 0.8); // 80% for needed levels
-        const questionsForOtherLevels = count - questionsForNeededLevels;
-        
-        levelsNeedingQuestions.forEach(level => {
-          const needed = minQuestionsPerLevel - (levelCounts[level] || 0);
-          questionsPerLevel[level] = Math.min(needed, Math.floor(questionsForNeededLevels / levelsNeedingQuestions.length));
-        });
-        
-        // Distribute remaining questions
-        const remainingQuestions = count - Object.values(questionsPerLevel).reduce((sum, count) => sum + count, 0);
-        if (remainingQuestions > 0) {
-          const remainingPerLevel = Math.floor(remainingQuestions / levels.length);
-          levels.forEach(level => {
-            questionsPerLevel[level] = (questionsPerLevel[level] || 0) + remainingPerLevel;
-          });
-        }
-      } else {
-        // Balanced distribution
-        const basePerLevel = Math.floor(count / levels.length);
-        const remainder = count % levels.length;
-        
-        levels.forEach((level, index) => {
-          questionsPerLevel[level] = basePerLevel + (index < remainder ? 1 : 0);
-        });
-      }
-
-      console.log('Planned question generation:', questionsPerLevel);
+      console.log(`Generating ${questionsPerLevel} questions for each level (${levels.length} levels = ${questionsPerLevel * levels.length} total)`);
 
       // Define the corrected JSON schema for structured outputs
       const questionsSchema = {
@@ -144,11 +97,9 @@ serve(async (req) => {
 
       let allQuestions: any[] = [];
 
-      // Generate questions for each level
-      for (const [currentLevel, questionsForThisLevel] of Object.entries(questionsPerLevel)) {
-        if (questionsForThisLevel === 0) continue;
-        
-        console.log(`Generating ${questionsForThisLevel} questions for level ${currentLevel}`);
+      // Generate exactly 5 questions for each level
+      for (const currentLevel of levels) {
+        console.log(`Generating ${questionsPerLevel} questions for level ${currentLevel}`);
 
         const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
@@ -189,7 +140,7 @@ ${currentLevel === 'C2' ? '- Expert-level grammar, sophisticated vocabulary, nat
               },
               {
                 role: 'user',
-                content: `Generate exactly ${questionsForThisLevel} English assessment questions for ${currentLevel} level ONLY. Each question must have exactly 4 options with one correct answer. All questions MUST be ${currentLevel} level difficulty.`
+                content: `Generate exactly ${questionsPerLevel} English assessment questions for ${currentLevel} level ONLY. Each question must have exactly 4 options with one correct answer. All questions MUST be ${currentLevel} level difficulty.`
               }
             ],
             response_format: {
