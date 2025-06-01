@@ -22,7 +22,7 @@ serve(async (req) => {
     const { action, count = 50, level = 'A2' } = await req.json()
 
     if (action === 'generate_questions') {
-      // Define the JSON schema for structured outputs
+      // Define the corrected JSON schema for structured outputs
       const questionsSchema = {
         type: "object",
         properties: {
@@ -60,9 +60,18 @@ serve(async (req) => {
                 question_type: { type: "string" }
               },
               required: [
-                "question", "options", "correct_answer", "topic", "level",
-                "explanation", "detailed_explanation", "first_principles_explanation",
-                "wrong_answer_explanations", "difficulty_score", "topic_tags", "question_type"
+                "question", 
+                "options", 
+                "correct_answer", 
+                "topic", 
+                "level",
+                "explanation", 
+                "detailed_explanation", 
+                "first_principles_explanation",
+                "wrong_answer_explanations", 
+                "difficulty_score", 
+                "topic_tags", 
+                "question_type"
               ],
               additionalProperties: false
             }
@@ -71,6 +80,8 @@ serve(async (req) => {
         required: ["questions"],
         additionalProperties: false
       }
+
+      console.log('Generating questions with OpenAI Structured Outputs...')
 
       // Generate questions using OpenAI with Structured Outputs
       const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -92,7 +103,7 @@ Each question should have:
 3. Brief explanation for the correct answer
 4. Detailed explanation covering the grammatical rule/principle
 5. First principles explanation connecting to fundamental language concepts
-6. Wrong answer explanations for each incorrect option
+6. Wrong answer explanations for each incorrect option (as an object with option text as keys)
 7. Appropriate difficulty score (1-100)
 8. Relevant topic tags
 
@@ -120,17 +131,20 @@ Ensure questions test practical language use, not just theoretical knowledge.`
       if (!openAIResponse.ok) {
         const errorData = await openAIResponse.json();
         console.error('OpenAI API error:', errorData);
-        throw new Error(`OpenAI API error: ${openAIResponse.statusText}`);
+        throw new Error(`OpenAI API error: ${openAIResponse.statusText} - ${JSON.stringify(errorData)}`);
       }
 
       const aiData = await openAIResponse.json();
+      console.log('OpenAI response received:', aiData);
       
       // Handle potential refusals or errors
       if (aiData.choices[0].message.refusal) {
+        console.error('OpenAI refused the request:', aiData.choices[0].message.refusal);
         throw new Error(`OpenAI refused the request: ${aiData.choices[0].message.refusal}`);
       }
 
       if (!aiData.choices[0].message.content) {
+        console.error('No content received from OpenAI');
         throw new Error('No content received from OpenAI');
       }
 
@@ -164,6 +178,8 @@ Ensure questions test practical language use, not just theoretical knowledge.`
         console.error('Questions insertion error:', insertError);
         throw new Error(`Failed to store questions: ${insertError.message}`);
       }
+
+      console.log('Successfully inserted questions into database:', insertedQuestions?.length);
 
       return new Response(
         JSON.stringify({ 
