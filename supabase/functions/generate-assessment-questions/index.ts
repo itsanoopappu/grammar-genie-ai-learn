@@ -22,7 +22,57 @@ serve(async (req) => {
     const { action, count = 50, level = 'A2' } = await req.json()
 
     if (action === 'generate_questions') {
-      // Generate questions using OpenAI
+      // Define the JSON schema for structured outputs
+      const questionsSchema = {
+        type: "object",
+        properties: {
+          questions: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                question: { type: "string" },
+                options: {
+                  type: "array",
+                  items: { type: "string" },
+                  minItems: 4,
+                  maxItems: 4
+                },
+                correct_answer: { type: "string" },
+                topic: { type: "string" },
+                level: { type: "string" },
+                explanation: { type: "string" },
+                detailed_explanation: { type: "string" },
+                first_principles_explanation: { type: "string" },
+                wrong_answer_explanations: {
+                  type: "object",
+                  additionalProperties: { type: "string" }
+                },
+                difficulty_score: {
+                  type: "integer",
+                  minimum: 1,
+                  maximum: 100
+                },
+                topic_tags: {
+                  type: "array",
+                  items: { type: "string" }
+                },
+                question_type: { type: "string" }
+              },
+              required: [
+                "question", "options", "correct_answer", "topic", "level",
+                "explanation", "detailed_explanation", "first_principles_explanation",
+                "wrong_answer_explanations", "difficulty_score", "topic_tags", "question_type"
+              ],
+              additionalProperties: false
+            }
+          }
+        },
+        required: ["questions"],
+        additionalProperties: false
+      }
+
+      // Generate questions using OpenAI with Structured Outputs
       const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -48,68 +98,46 @@ Each question should have:
 
 Focus on these grammar topics: tenses, conditionals, passive voice, reported speech, modal verbs, articles, prepositions, relative clauses, sentence structure, word formation.
 
-Ensure questions test practical language use, not just theoretical knowledge.
-
-IMPORTANT: Return ONLY valid JSON without any markdown formatting or code blocks.`
+Ensure questions test practical language use, not just theoretical knowledge.`
             },
             {
               role: 'user',
-              content: `Generate ${count} English assessment questions for ${level} level. Return as JSON with this exact structure:
-              {
-                "questions": [
-                  {
-                    "question": "Complete the sentence: If I _____ you yesterday, I would have told you the news.",
-                    "options": ["saw", "had seen", "have seen", "see"],
-                    "correct_answer": "had seen",
-                    "topic": "Third Conditional",
-                    "level": "${level}",
-                    "explanation": "Third conditional uses 'had + past participle' in the if-clause for unreal past situations.",
-                    "detailed_explanation": "The third conditional describes hypothetical situations in the past. The structure is: If + past perfect, would have + past participle. Here 'had seen' indicates the past perfect form needed for the condition that didn't happen.",
-                    "first_principles_explanation": "English conditionals express different degrees of reality and time. The third conditional specifically deals with counterfactual past events - things that didn't happen but we imagine their consequences. The past perfect (had + past participle) signals this unreality in past time, creating a logical framework for expressing regret, missed opportunities, or alternative histories.",
-                    "wrong_answer_explanations": {
-                      "saw": "Simple past 'saw' would be used in first conditional (present real situations), not third conditional (past unreal).",
-                      "have seen": "Present perfect 'have seen' doesn't fit the third conditional structure which requires past perfect.",
-                      "see": "Base form 'see' is incorrect here as it doesn't establish the past timeframe needed for third conditional."
-                    },
-                    "difficulty_score": 75,
-                    "topic_tags": ["conditionals", "past_perfect", "hypothetical_situations"],
-                    "question_type": "multiple_choice"
-                  }
-                ]
-              }`
+              content: `Generate ${count} English assessment questions for ${level} level. Each question must have exactly 4 options with one correct answer.`
             }
           ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "assessment_questions",
+              strict: true,
+              schema: questionsSchema
+            }
+          },
           temperature: 0.3
         })
       });
 
       if (!openAIResponse.ok) {
+        const errorData = await openAIResponse.json();
+        console.error('OpenAI API error:', errorData);
         throw new Error(`OpenAI API error: ${openAIResponse.statusText}`);
       }
 
       const aiData = await openAIResponse.json();
-      let aiContent = aiData.choices[0].message.content;
       
-      console.log('Raw AI response:', aiContent);
-      
-      // Clean the response to remove markdown code blocks if present
-      if (aiContent.includes('```json')) {
-        aiContent = aiContent.replace(/```json\n?/, '').replace(/\n?```$/, '');
+      // Handle potential refusals or errors
+      if (aiData.choices[0].message.refusal) {
+        throw new Error(`OpenAI refused the request: ${aiData.choices[0].message.refusal}`);
       }
-      
-      // Remove any leading/trailing whitespace
-      aiContent = aiContent.trim();
-      
-      console.log('Cleaned AI response:', aiContent);
-      
-      let questionsData;
-      try {
-        questionsData = JSON.parse(aiContent);
-      } catch (parseError) {
-        console.error('JSON parse error:', parseError);
-        console.error('Content that failed to parse:', aiContent);
-        throw new Error(`Failed to parse AI response as JSON: ${parseError.message}`);
+
+      if (!aiData.choices[0].message.content) {
+        throw new Error('No content received from OpenAI');
       }
+
+      // With structured outputs, the content is guaranteed to be valid JSON
+      const questionsData = JSON.parse(aiData.choices[0].message.content);
+      
+      console.log('Successfully parsed questions:', questionsData.questions.length);
       
       // Insert questions into database
       const { data: insertedQuestions, error: insertError } = await supabaseClient
