@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,9 +23,17 @@ const PlacementTest = () => {
   const setSelectedAnswer = assessmentMode === 'adaptive' ? setAdaptiveAnswer : setComprehensiveAnswer;
   const resetTest = assessmentMode === 'adaptive' ? resetAdaptiveTest : resetComprehensiveTest;
 
-  const testProgress = state.testStarted ? ((state.currentQuestionIndex || state.currentQuestion) + 1) / Math.max(state.questions.length, 1) * 100 : 0;
+  // Handle different property names between states
+  const getCurrentQuestionIndex = () => {
+    if (assessmentMode === 'adaptive') {
+      return adaptiveState.currentQuestionIndex || 0;
+    }
+    return comprehensiveState.currentQuestion || 0;
+  };
+
+  const testProgress = state.testStarted ? (getCurrentQuestionIndex() + 1) / Math.max(state.questions.length, 1) * 100 : 0;
   const timeElapsed = state.startTime ? Math.floor((Date.now() - state.startTime.getTime()) / 1000 / 60) : 0;
-  const currentQuestionIndex = state.currentQuestionIndex || state.currentQuestion || 0;
+  const currentQuestionIndex = getCurrentQuestionIndex();
 
   const handleStartTest = async () => {
     if (assessmentMode === 'adaptive') {
@@ -418,9 +427,10 @@ const PlacementTest = () => {
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                       {Object.entries(state.testResults.levelBreakdown).map(([level, data]) => {
                         const isSimpleBreakdown = typeof data === 'number';
-                        const correct = isSimpleBreakdown ? data : data.correct;
-                        const total = isSimpleBreakdown ? 1 : data.total;
-                        const points = isSimpleBreakdown ? null : data.points;
+                        const levelData = data as { correct: number; total: number; points: number } | number;
+                        const correct = isSimpleBreakdown ? (levelData as number) : (levelData as { correct: number; total: number; points: number }).correct;
+                        const total = isSimpleBreakdown ? 1 : (levelData as { correct: number; total: number; points: number }).total;
+                        const points = isSimpleBreakdown ? null : (levelData as { correct: number; total: number; points: number }).points;
                         
                         return (
                           <div key={level} className="text-center p-3 rounded-lg bg-gray-50">
@@ -451,7 +461,7 @@ const PlacementTest = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {state.testResults.strengths.length > 0 ? (
+                    {state.testResults.strengths && state.testResults.strengths.length > 0 ? (
                       <ul className="space-y-2">
                         {state.testResults.strengths.map((strength, index) => (
                           <li key={index} className="flex items-center space-x-2">
@@ -474,7 +484,7 @@ const PlacementTest = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {state.testResults.weaknesses.length > 0 ? (
+                    {state.testResults.weaknesses && state.testResults.weaknesses.length > 0 ? (
                       <ul className="space-y-2">
                         {state.testResults.weaknesses.map((weakness, index) => (
                           <li key={index} className="flex items-center space-x-2">
