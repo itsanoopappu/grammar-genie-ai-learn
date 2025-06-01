@@ -117,21 +117,30 @@ export const determineAdaptiveLevel = (
 
 export const getNextDifficultyLevel = (
   currentLevel: string,
-  isCorrect: boolean,
+  lastAnswerCorrect: boolean,
   consecutiveCorrect: number,
   consecutiveWrong: number
 ): string => {
   const levelOrder = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
   const currentIndex = levelOrder.indexOf(currentLevel);
 
-  if (isCorrect && consecutiveCorrect >= 2 && currentIndex < levelOrder.length - 1) {
-    // Move up after 2 consecutive correct answers
-    return levelOrder[currentIndex + 1];
-  } else if (!isCorrect && consecutiveWrong >= 2 && currentIndex > 0) {
-    // Move down after 2 consecutive wrong answers
-    return levelOrder[currentIndex - 1];
+  console.log(`Difficulty check: current=${currentLevel}, lastCorrect=${lastAnswerCorrect}, consCorrect=${consecutiveCorrect}, consWrong=${consecutiveWrong}`);
+
+  // Move up after 2 consecutive correct answers
+  if (consecutiveCorrect >= 2 && currentIndex < levelOrder.length - 1) {
+    const newLevel = levelOrder[currentIndex + 1];
+    console.log(`Moving UP: ${currentLevel} → ${newLevel} (${consecutiveCorrect} consecutive correct)`);
+    return newLevel;
+  }
+  
+  // Move down after 2 consecutive wrong answers
+  if (consecutiveWrong >= 2 && currentIndex > 0) {
+    const newLevel = levelOrder[currentIndex - 1];
+    console.log(`Moving DOWN: ${currentLevel} → ${newLevel} (${consecutiveWrong} consecutive wrong)`);
+    return newLevel;
   }
 
+  console.log(`Staying at level: ${currentLevel}`);
   return currentLevel;
 };
 
