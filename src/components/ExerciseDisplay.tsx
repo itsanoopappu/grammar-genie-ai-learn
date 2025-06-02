@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -51,7 +52,7 @@ const ExerciseDisplay: React.FC<ExerciseDisplayProps> = ({
           {/* Question Section */}
           <div className="space-y-6">
             <div className="text-center space-y-3">
-              <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent leading-relaxed">
+              <h2 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent leading-relaxed">
                 {exercise.content.question}
               </h2>
               
@@ -86,8 +87,8 @@ const ExerciseDisplay: React.FC<ExerciseDisplayProps> = ({
                 const isSelected = isSelectedAnswer(option);
                 
                 let cardClasses = "transition-all duration-300 cursor-pointer border-2 bg-white/80 backdrop-blur-sm hover:shadow-lg transform hover:scale-[1.02]";
-                let badgeClasses = "w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg transition-all duration-300";
-                let textClasses = "font-medium text-gray-800 text-lg";
+                let badgeClasses = "w-10 h-10 rounded-full flex items-center justify-center font-bold text-base transition-all duration-300";
+                let textClasses = "font-medium text-gray-800 text-base";
                 
                 if (showFeedback) {
                   if (isCorrect) {
@@ -134,8 +135,8 @@ const ExerciseDisplay: React.FC<ExerciseDisplayProps> = ({
                           
                           {showFeedback && (
                             <div className="ml-auto">
-                              {isCorrect && <CheckCircle className="h-6 w-6 text-green-600" />}
-                              {isSelected && !isCorrect && <XCircle className="h-6 w-6 text-red-600" />}
+                              {isCorrect && <CheckCircle className="h-5 w-5 text-green-600" />}
+                              {isSelected && !isCorrect && <XCircle className="h-5 w-5 text-red-600" />}
                             </div>
                           )}
                         </Label>
@@ -153,13 +154,13 @@ const ExerciseDisplay: React.FC<ExerciseDisplayProps> = ({
               <div className="bg-white/80 backdrop-blur-sm rounded-xl p-6 border border-amber-200 shadow-lg">
                 <div className="flex items-start space-x-4">
                   <div className="flex-shrink-0">
-                    <div className="w-10 h-10 bg-gradient-to-r from-amber-400 to-orange-500 rounded-full flex items-center justify-center shadow-lg">
-                      <Lightbulb className="h-5 w-5 text-white" />
+                    <div className="w-8 h-8 bg-gradient-to-r from-amber-400 to-orange-500 rounded-full flex items-center justify-center shadow-lg">
+                      <Lightbulb className="h-4 w-4 text-white" />
                     </div>
                   </div>
                   <div className="flex-1">
-                    <h4 className="font-bold text-amber-900 mb-3 text-lg">Explanation</h4>
-                    <p className="text-amber-800 leading-relaxed">
+                    <h4 className="font-bold text-amber-900 mb-3 text-base">Explanation</h4>
+                    <p className="text-amber-800 leading-relaxed text-sm">
                       {exercise.content.explanation}
                     </p>
                   </div>
@@ -174,17 +175,17 @@ const ExerciseDisplay: React.FC<ExerciseDisplayProps> = ({
               <div className="bg-white/80 backdrop-blur-sm rounded-xl p-6 border border-blue-200 shadow-lg">
                 <div className="flex items-start space-x-4">
                   <div className="flex-shrink-0">
-                    <div className="w-10 h-10 bg-gradient-to-r from-blue-400 to-indigo-500 rounded-full flex items-center justify-center shadow-lg">
-                      <Lightbulb className="h-5 w-5 text-white" />
+                    <div className="w-8 h-8 bg-gradient-to-r from-blue-400 to-indigo-500 rounded-full flex items-center justify-center shadow-lg">
+                      <Lightbulb className="h-4 w-4 text-white" />
                     </div>
                   </div>
                   <div className="flex-1">
-                    <h4 className="font-bold text-blue-900 mb-4 text-lg">Helpful Hints</h4>
+                    <h4 className="font-bold text-blue-900 mb-4 text-base">Helpful Hints</h4>
                     <ul className="space-y-3">
                       {exercise.content.hints.map((hint, index) => (
                         <li key={index} className="flex items-start space-x-3">
                           <div className="w-2 h-2 bg-blue-400 rounded-full mt-2 flex-shrink-0"></div>
-                          <span className="text-blue-800 leading-relaxed">{hint}</span>
+                          <span className="text-blue-800 leading-relaxed text-sm">{hint}</span>
                         </li>
                       ))}
                     </ul>
