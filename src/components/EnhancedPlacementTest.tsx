@@ -26,16 +26,8 @@ const EnhancedPlacementTest = () => {
   const handleSubmitAnswer = async () => {
     setIsSubmitting(true);
     await submitAnswer();
-    
-    // Brief pause for better UX, then automatically move to next question
-    setTimeout(() => {
-      handleNextQuestion();
-    }, 1500);
-  };
-
-  const handleNextQuestion = async () => {
-    setShowFeedback(false);
     setIsSubmitting(false);
+    setShowFeedback(false);
     await nextQuestion();
   };
 
@@ -149,7 +141,7 @@ const EnhancedPlacementTest = () => {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Enhanced Progress Header */}
+      {/* Progress Header */}
       <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 shadow-md">
         <CardHeader className="pb-4">
           <div className="flex items-center justify-between">
@@ -170,7 +162,7 @@ const EnhancedPlacementTest = () => {
         </CardHeader>
       </Card>
 
-      {/* Enhanced Exercise Display */}
+      {/* Exercise Display */}
       <div className="space-y-6">
         {currentQuestion && (
           <ExerciseDisplay
@@ -196,29 +188,17 @@ const EnhancedPlacementTest = () => {
           />
         )}
 
-        {/* Enhanced Submit Button */}
+        {/* Submit Button */}
         <Card className="border-blue-200 shadow-md">
           <CardContent className="p-6">
-            {!isSubmitting ? (
-              <Button 
-                onClick={handleSubmitAnswer} 
-                disabled={!state.selectedAnswer}
-                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white py-4 text-lg font-semibold shadow-lg hover:shadow-xl transition-all transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-                size="lg"
-              >
-                {state.selectedAnswer ? 'Submit Answer' : 'Select an answer to continue'}
-              </Button>
-            ) : (
-              <div className="text-center py-4">
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6 mb-4">
-                  <div className="flex items-center justify-center space-x-3 mb-2">
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
-                    <span className="text-blue-700 font-medium">Processing your answer...</span>
-                  </div>
-                  <p className="text-blue-600 text-sm">Moving to next question automatically</p>
-                </div>
-              </div>
-            )}
+            <Button 
+              onClick={handleSubmitAnswer} 
+              disabled={!state.selectedAnswer || isSubmitting}
+              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white py-4 text-lg font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              size="lg"
+            >
+              {isSubmitting ? 'Processing...' : state.selectedAnswer ? 'Submit Answer' : 'Select an answer to continue'}
+            </Button>
           </CardContent>
         </Card>
       </div>
