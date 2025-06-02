@@ -87,7 +87,7 @@ export const useAdaptivePlacementTest = () => {
       const allQuestions = await loadAdaptiveQuestionPool(testData.id);
       
       if (allQuestions.length < 15) {
-        throw new Error(`Insufficient questions available. Found ${allQuestions.length}, need 15.`);
+        throw new Error(`Insufficient unique grammar questions available. Found ${allQuestions.length}, need 15.`);
       }
 
       setState(produce(state => {
@@ -117,61 +117,30 @@ export const useAdaptivePlacementTest = () => {
   const loadAdaptiveQuestionPool = async (testId: string) => {
     console.log('🔍 Starting adaptive question pool loading...');
     
-    // First, let's check what questions exist in the database
-    const { data: allQuestionsRaw, error: questionsError } = await supabase
+    // Get all questions with COMPLETE grammar metadata only
+    const { data: allQuestions, error: questionsError } = await supabase
       .from('test_questions')
-      .select('*');
+      .select('*')
+      .not('question', 'is', null)
+      .not('correct_answer', 'is', null)
+      .not('options', 'is', null)
+      .not('grammar_topic', 'is', null)
+      .not('grammar_category', 'is', null);
 
     if (questionsError) {
       console.error('❌ Error fetching questions:', questionsError);
       throw questionsError;
     }
 
-    if (!allQuestionsRaw || allQuestionsRaw.length === 0) {
-      console.error('❌ No questions found in database at all');
+    if (!allQuestions || allQuestions.length === 0) {
+      console.error('❌ No questions found in database');
       throw new Error('No questions available in database');
     }
 
-    console.log(`📊 Total questions in database: ${allQuestionsRaw.length}`);
-
-    // Analyze what data we have
-    const questionsWithBasicData = allQuestionsRaw.filter(q => 
-      q.question && q.correct_answer && q.options
-    );
-    console.log(`📝 Questions with basic data (question, answer, options): ${questionsWithBasicData.length}`);
-
-    const questionsWithGrammarTopic = questionsWithBasicData.filter(q => q.grammar_topic);
-    console.log(`🎯 Questions with grammar_topic: ${questionsWithGrammarTopic.length}`);
-
-    const questionsWithGrammarCategory = questionsWithBasicData.filter(q => q.grammar_category);
-    console.log(`📂 Questions with grammar_category: ${questionsWithGrammarCategory.length}`);
-
-    const questionsWithCompleteGrammar = questionsWithBasicData.filter(q => 
-      q.grammar_topic && q.grammar_category
-    );
-    console.log(`✅ Questions with complete grammar metadata: ${questionsWithCompleteGrammar.length}`);
-
-    // Use the most restrictive set that still gives us enough questions
-    let workingQuestions = questionsWithCompleteGrammar;
-    
-    if (workingQuestions.length < 15) {
-      console.warn('⚠️ Not enough questions with complete grammar metadata, falling back to questions with grammar_topic only');
-      workingQuestions = questionsWithGrammarTopic;
-      
-      if (workingQuestions.length < 15) {
-        console.warn('⚠️ Not enough questions with grammar_topic, falling back to all questions with basic data');
-        workingQuestions = questionsWithBasicData;
-        
-        if (workingQuestions.length < 15) {
-          throw new Error(`Insufficient questions in database. Found ${workingQuestions.length} usable questions, need at least 15.`);
-        }
-      }
-    }
-
-    console.log(`🎲 Working with ${workingQuestions.length} questions`);
+    console.log(`✅ Found ${allQuestions.length} questions with complete grammar metadata`);
 
     // Filter out recently seen questions (last 30 days)
-    let questionPool = workingQuestions;
+    let questionPool = allQuestions;
     if (user) {
       const { data: seenQuestions } = await supabase
         .from('user_question_history')
@@ -180,49 +149,52 @@ export const useAdaptivePlacementTest = () => {
         .gte('seen_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
 
       const seenQuestionIds = new Set(seenQuestions?.map(sq => sq.question_id) || []);
-      questionPool = workingQuestions.filter(q => !seenQuestionIds.has(q.id));
-      console.log(`📋 After filtering seen questions: ${questionPool.length} (${seenQuestionIds.size} seen in last 30 days)`);
+      questionPool = allQuestions.filter(q => !seenQuestionIds.has(q.id));
+      console.log(`📋 Filtered to ${questionPool.length} unseen questions (${seenQuestionIds.size} seen in last 30 days)`);
     }
 
-    // Group by unique identifiers (prefer grammar_topic, fallback to question text)
-    const uniqueTopicMap = new Map<string, any[]>();
+    // Group by unique grammar topics - PRIORITY: Get 15 unique topics first
+    const grammarTopicMap = new Map<string, any[]>();
     questionPool.forEach(question => {
-      const uniqueKey = question.grammar_topic || `question_${question.id}`;
-      if (!uniqueTopicMap.has(uniqueKey)) {
-        uniqueTopicMap.set(uniqueKey, []);
+      const grammarTopic = question.grammar_topic;
+      if (grammarTopic) {
+        if (!grammarTopicMap.has(grammarTopic)) {
+          grammarTopicMap.set(grammarTopic, []);
+        }
+        grammarTopicMap.get(grammarTopic)!.push(question);
       }
-      uniqueTopicMap.get(uniqueKey)!.push(question);
     });
 
-    const availableTopics = Array.from(uniqueTopicMap.keys());
-    console.log(`🎯 Found ${availableTopics.length} unique topics/questions`);
+    const availableTopics = Array.from(grammarTopicMap.keys());
+    console.log(`🎯 Found ${availableTopics.length} unique grammar topics available`);
 
     if (availableTopics.length < 15) {
-      throw new Error(`Insufficient unique topics/questions. Found ${availableTopics.length}, need 15.`);
+      console.error(`❌ Insufficient unique grammar topics. Need 15, found ${availableTopics.length}`);
+      throw new Error(`Insufficient unique grammar topics. Found ${availableTopics.length}, need 15.`);
     }
 
-    // Select 15 unique questions
+    // NEW APPROACH: Select 15 unique grammar topics first, then pick best questions
     const selectedQuestions: any[] = [];
-    const usedTopics = new Set<string>();
+    const usedGrammarTopics = new Set<string>();
     
-    // Shuffle topics for randomization
+    // Step 1: Shuffle topics for randomization
     const shuffledTopics = [...availableTopics].sort(() => Math.random() - 0.5);
     
-    // For each topic, select the best question
+    // Step 2: For each topic, select the best question (prefer current level, then adjacent)
     for (const topic of shuffledTopics) {
       if (selectedQuestions.length >= 15) break;
       
-      const topicQuestions = uniqueTopicMap.get(topic)!;
+      const topicQuestions = grammarTopicMap.get(topic)!;
       
       // Sort questions by level preference: B1 first, then adjacent levels
       const sortedQuestions = topicQuestions.sort((a, b) => {
         const levelOrder = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
-        const aIndex = levelOrder.indexOf(a.level || 'B1');
-        const bIndex = levelOrder.indexOf(b.level || 'B1');
+        const aIndex = levelOrder.indexOf(a.level);
+        const bIndex = levelOrder.indexOf(b.level);
         
         // Prefer B1 first
-        if ((a.level || 'B1') === 'B1' && (b.level || 'B1') !== 'B1') return -1;
-        if ((b.level || 'B1') === 'B1' && (a.level || 'B1') !== 'B1') return 1;
+        if (a.level === 'B1' && b.level !== 'B1') return -1;
+        if (b.level === 'B1' && a.level !== 'B1') return 1;
         
         // Then prefer adjacent levels to B1 (A2, B2)
         const b1Index = levelOrder.indexOf('B1');
@@ -238,35 +210,32 @@ export const useAdaptivePlacementTest = () => {
       // Select the best question for this topic
       const selectedQuestion = sortedQuestions[0];
       selectedQuestions.push(selectedQuestion);
-      usedTopics.add(topic);
+      usedGrammarTopics.add(topic);
       
-      console.log(`✅ Selected topic/question "${topic}" with level ${selectedQuestion.level || 'unknown'}`);
+      console.log(`✅ Selected topic "${topic}" with level ${selectedQuestion.level}`);
       
-      // Track grammar usage for this test (only if we have the data)
-      if (selectedQuestion.grammar_topic && selectedQuestion.grammar_category) {
-        await supabase
-          .from('test_grammar_usage')
-          .insert({
-            test_id: testId,
-            grammar_topic: selectedQuestion.grammar_topic,
-            grammar_category: selectedQuestion.grammar_category
-          });
-      }
+      // Track grammar usage for this test
+      await supabase
+        .from('test_grammar_usage')
+        .insert({
+          test_id: testId,
+          grammar_topic: selectedQuestion.grammar_topic,
+          grammar_category: selectedQuestion.grammar_category || 'unknown'
+        });
     }
 
-    // Final shuffle of selected questions for random order
+    // Step 3: Final shuffle of selected questions for random order
     const finalQuestions = selectedQuestions.sort(() => Math.random() - 0.5);
 
     // Log final distribution
     const levelDistribution = finalQuestions.reduce((acc: any, q: any) => {
-      const level = q.level || 'unknown';
-      acc[level] = (acc[level] || 0) + 1;
+      acc[q.level] = (acc[q.level] || 0) + 1;
       return acc;
     }, {});
     
     console.log('🎉 Final selection completed:');
     console.log(`📊 Level distribution:`, levelDistribution);
-    console.log(`🔤 Unique topics selected: ${usedTopics.size}`);
+    console.log(`🔤 Grammar topics selected: ${usedGrammarTopics.size}`);
     console.log(`📝 Total questions: ${finalQuestions.length}`);
     
     return finalQuestions.slice(0, 15); // Ensure exactly 15 questions
@@ -297,7 +266,7 @@ export const useAdaptivePlacementTest = () => {
       const levelWeights = weights[level as keyof typeof weights] || weights['B1'];
       const pointsEarned = isCorrect ? levelWeights.correct : levelWeights.incorrect;
 
-      // Update grammar performance tracking with complete metadata (if available)
+      // Update grammar performance tracking with complete metadata
       if (currentQuestion.grammar_category && currentQuestion.grammar_topic) {
         await supabase.rpc('update_user_grammar_performance', {
           p_user_id: user?.id,
@@ -334,8 +303,8 @@ export const useAdaptivePlacementTest = () => {
         state.weightedScore += pointsEarned;
         state.questionsAsked += 1;
         
-        // Update grammar performance tracking in state (if available)
-        const grammarCategory = currentQuestion.grammar_category || 'general';
+        // Update grammar performance tracking in state
+        const grammarCategory = currentQuestion.grammar_category || 'unknown';
         if (!state.grammarPerformance[grammarCategory]) {
           state.grammarPerformance[grammarCategory] = { correct: 0, total: 0, accuracy: 0 };
         }
@@ -414,7 +383,7 @@ export const useAdaptivePlacementTest = () => {
 
       const percentageScore = Math.max(0, (weightedScore / totalPossibleScore) * 100);
 
-      // Save assessment grammar insights for all grammar categories (if available)
+      // Save assessment grammar insights for all grammar categories
       for (const [category, performance] of Object.entries(state.grammarPerformance)) {
         await supabase
           .from('assessment_grammar_insights')
