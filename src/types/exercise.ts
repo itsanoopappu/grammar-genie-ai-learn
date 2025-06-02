@@ -1,4 +1,3 @@
-
 // Centralized type definitions for exercises
 export interface ExerciseContent {
   question: string;
@@ -7,6 +6,7 @@ export interface ExerciseContent {
   explanation: string;
   hints?: string[];
   commonMistakes?: string[];
+  grammar_topic?: string; // Added missing property
 }
 
 export interface Exercise {
