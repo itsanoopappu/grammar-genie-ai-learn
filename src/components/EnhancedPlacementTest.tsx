@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -21,19 +21,19 @@ const EnhancedPlacementTest = () => {
   } = useEnhancedAssessment();
 
   const [showFeedback, setShowFeedback] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmitAnswer = async () => {
-    setIsSubmitting(true);
     await submitAnswer();
-    setIsSubmitting(false);
+    setShowFeedback(true);
+  };
+
+  const handleNextQuestion = async () => {
     setShowFeedback(false);
     await nextQuestion();
   };
 
   const handleRestart = () => {
     setShowFeedback(false);
-    setIsSubmitting(false);
     resetAssessment();
   };
 
@@ -58,64 +58,62 @@ const EnhancedPlacementTest = () => {
   if (!state.testStarted) {
     return (
       <div className="max-w-4xl mx-auto">
-        <Card className="bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 border-blue-200 shadow-xl">
-          <CardHeader className="text-center pb-6">
-            <CardTitle className="flex items-center justify-center space-x-3 text-3xl">
+        <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+          <CardHeader className="text-center">
+            <CardTitle className="flex items-center justify-center space-x-2 text-2xl">
               <Target className="h-8 w-8 text-blue-600" />
-              <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                Enhanced English Level Assessment
-              </span>
+              <span>Enhanced English Level Assessment</span>
             </CardTitle>
-            <CardDescription className="text-lg text-gray-600 mt-2">
+            <CardDescription className="text-lg">
               Discover your true English level with our comprehensive assessment
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-8">
+          <CardContent className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="text-center p-6 bg-white/80 backdrop-blur-sm rounded-xl shadow-md hover:shadow-lg transition-shadow">
-                <CheckCircle className="h-10 w-10 text-green-600 mx-auto mb-3" />
-                <h3 className="font-bold text-gray-900 mb-2">Accurate Results</h3>
+              <div className="text-center p-4 bg-white rounded-lg shadow-sm">
+                <CheckCircle className="h-8 w-8 text-green-600 mx-auto mb-2" />
+                <h3 className="font-semibold text-gray-900">Accurate Results</h3>
                 <p className="text-sm text-gray-600">
                   Advanced algorithm for precise level prediction
                 </p>
               </div>
-              <div className="text-center p-6 bg-white/80 backdrop-blur-sm rounded-xl shadow-md hover:shadow-lg transition-shadow">
-                <BookOpen className="h-10 w-10 text-blue-600 mx-auto mb-3" />
-                <h3 className="font-bold text-gray-900 mb-2">Detailed Analysis</h3>
+              <div className="text-center p-4 bg-white rounded-lg shadow-sm">
+                <BookOpen className="h-8 w-8 text-blue-600 mx-auto mb-2" />
+                <h3 className="font-semibold text-gray-900">Detailed Analysis</h3>
                 <p className="text-sm text-gray-600">
                   Comprehensive breakdown of strengths and weaknesses
                 </p>
               </div>
-              <div className="text-center p-6 bg-white/80 backdrop-blur-sm rounded-xl shadow-md hover:shadow-lg transition-shadow">
-                <Clock className="h-10 w-10 text-purple-600 mx-auto mb-3" />
-                <h3 className="font-bold text-gray-900 mb-2">Quick & Easy</h3>
+              <div className="text-center p-4 bg-white rounded-lg shadow-sm">
+                <Clock className="h-8 w-8 text-purple-600 mx-auto mb-2" />
+                <h3 className="font-semibold text-gray-900">Quick & Easy</h3>
                 <p className="text-sm text-gray-600">
                   15 questions, approximately 10-15 minutes
                 </p>
               </div>
             </div>
 
-            <div className="bg-white/80 backdrop-blur-sm p-8 rounded-xl shadow-md">
-              <h3 className="font-bold text-gray-900 mb-6 text-xl">What You'll Get:</h3>
-              <ul className="space-y-4 text-gray-700">
-                <li className="flex items-center space-x-3">
-                  <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
+            <div className="bg-white p-6 rounded-lg shadow-sm">
+              <h3 className="font-semibold text-gray-900 mb-4">What You'll Get:</h3>
+              <ul className="space-y-2 text-gray-700">
+                <li className="flex items-center space-x-2">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
                   <span>Your exact CEFR level (A1-C2) with confidence score</span>
                 </li>
-                <li className="flex items-center space-x-3">
-                  <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
+                <li className="flex items-center space-x-2">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
                   <span>Detailed analysis of your grammar strengths and weaknesses</span>
                 </li>
-                <li className="flex items-center space-x-3">
-                  <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
+                <li className="flex items-center space-x-2">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
                   <span>Question-by-question review with explanations</span>
                 </li>
-                <li className="flex items-center space-x-3">
-                  <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
+                <li className="flex items-center space-x-2">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
                   <span>Personalized practice drills for weak areas</span>
                 </li>
-                <li className="flex items-center space-x-3">
-                  <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
+                <li className="flex items-center space-x-2">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
                   <span>Weekly study plan and next steps</span>
                 </li>
               </ul>
@@ -125,7 +123,7 @@ const EnhancedPlacementTest = () => {
               <Button 
                 onClick={startAssessment} 
                 size="lg" 
-                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-8 py-3 text-lg font-semibold shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
+                className="bg-blue-600 hover:bg-blue-700"
               >
                 Start Enhanced Assessment
               </Button>
@@ -141,67 +139,65 @@ const EnhancedPlacementTest = () => {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Progress Header */}
-      <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 shadow-md">
-        <CardHeader className="pb-4">
+      <Card>
+        <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center space-x-3">
-              <Target className="h-6 w-6 text-blue-600" />
-              <span className="text-xl">Question {state.currentQuestionIndex + 1} of {state.questions.length}</span>
+            <CardTitle className="flex items-center space-x-2">
+              <Target className="h-5 w-5 text-blue-500" />
+              <span>Question {state.currentQuestionIndex + 1} of {state.questions.length}</span>
             </CardTitle>
-            <div className="text-right">
-              <div className="text-sm text-gray-600 mb-1">
-                Progress: {Math.round(progress)}%
-              </div>
-              <div className="text-xs text-gray-500">
-                {state.questions.length - state.currentQuestionIndex - 1} remaining
-              </div>
+            <div className="text-sm text-gray-600">
+              Progress: {Math.round(progress)}%
             </div>
           </div>
-          <Progress value={progress} className="mt-3 h-3 bg-blue-100" />
+          <Progress value={progress} className="mt-2" />
         </CardHeader>
+
+        <CardContent className="space-y-6">
+          {currentQuestion && (
+            <ExerciseDisplay
+              exercise={{
+                id: currentQuestion.id,
+                type: 'multiple-choice',
+                content: {
+                  question: currentQuestion.question,
+                  options: currentQuestion.options,
+                  correct_answer: currentQuestion.correct_answer,
+                  explanation: currentQuestion.explanation
+                },
+                difficulty_level: currentQuestion.difficulty_score || 50,
+                estimated_time_seconds: 60
+              }}
+              userAnswer={''}
+              selectedOption={state.selectedAnswer}
+              onAnswerChange={() => {}}
+              onOptionChange={setSelectedAnswer}
+              disabled={showFeedback}
+            />
+          )}
+
+          <div className="flex justify-between">
+            {!showFeedback ? (
+              <Button 
+                onClick={handleSubmitAnswer} 
+                disabled={!state.selectedAnswer}
+                className="w-full"
+              >
+                Submit Answer
+              </Button>
+            ) : (
+              <Button 
+                onClick={handleNextQuestion}
+                className="w-full"
+              >
+                {state.currentQuestionIndex >= state.questions.length - 1 
+                  ? 'Complete Assessment' 
+                  : 'Next Question'}
+              </Button>
+            )}
+          </div>
+        </CardContent>
       </Card>
-
-      {/* Exercise Display */}
-      <div className="space-y-6">
-        {currentQuestion && (
-          <ExerciseDisplay
-            exercise={{
-              id: currentQuestion.id,
-              type: 'multiple-choice',
-              content: {
-                question: currentQuestion.question,
-                options: currentQuestion.options,
-                correct_answer: currentQuestion.correct_answer,
-                explanation: currentQuestion.explanation
-              },
-              difficulty_level: currentQuestion.difficulty_score || 50,
-              estimated_time_seconds: 60
-            }}
-            userAnswer={''}
-            selectedOption={state.selectedAnswer}
-            onAnswerChange={() => {}}
-            onOptionChange={setSelectedAnswer}
-            disabled={isSubmitting}
-            showFeedback={false}
-            isAssessmentMode={true}
-          />
-        )}
-
-        {/* Submit Button */}
-        <Card className="border-blue-200 shadow-md">
-          <CardContent className="p-6">
-            <Button 
-              onClick={handleSubmitAnswer} 
-              disabled={!state.selectedAnswer || isSubmitting}
-              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white py-4 text-lg font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              size="lg"
-            >
-              {isSubmitting ? 'Processing...' : state.selectedAnswer ? 'Submit Answer' : 'Select an answer to continue'}
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
 };
