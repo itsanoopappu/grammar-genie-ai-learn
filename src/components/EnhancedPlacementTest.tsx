@@ -1,5 +1,4 @@
-
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -25,6 +24,11 @@ const EnhancedPlacementTest = () => {
   const handleSubmitAnswer = async () => {
     await submitAnswer();
     setShowFeedback(true);
+    
+    // Automatically move to next question after 2.5 seconds
+    setTimeout(() => {
+      handleNextQuestion();
+    }, 2500);
   };
 
   const handleNextQuestion = async () => {
@@ -173,6 +177,7 @@ const EnhancedPlacementTest = () => {
               onAnswerChange={() => {}}
               onOptionChange={setSelectedAnswer}
               disabled={showFeedback}
+              showFeedback={showFeedback}
             />
           )}
 
@@ -181,19 +186,30 @@ const EnhancedPlacementTest = () => {
               <Button 
                 onClick={handleSubmitAnswer} 
                 disabled={!state.selectedAnswer}
-                className="w-full"
+                className="w-full bg-blue-600 hover:bg-blue-700"
+                size="lg"
               >
                 Submit Answer
               </Button>
             ) : (
-              <Button 
-                onClick={handleNextQuestion}
-                className="w-full"
-              >
-                {state.currentQuestionIndex >= state.questions.length - 1 
-                  ? 'Complete Assessment' 
-                  : 'Next Question'}
-              </Button>
+              <div className="w-full text-center">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                  <p className="text-blue-700 font-medium">
+                    {state.selectedAnswer === currentQuestion.correct_answer 
+                      ? "✅ Correct! Moving to next question..." 
+                      : "❌ Incorrect. Moving to next question..."}
+                  </p>
+                </div>
+                <Button 
+                  onClick={handleNextQuestion}
+                  className="bg-blue-600 hover:bg-blue-700"
+                  size="lg"
+                >
+                  {state.currentQuestionIndex >= state.questions.length - 1 
+                    ? 'Complete Assessment' 
+                    : 'Next Question'}
+                </Button>
+              </div>
             )}
           </div>
         </CardContent>
