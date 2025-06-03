@@ -14,34 +14,41 @@ import { usePlacementTestLogic } from '@/hooks/usePlacementTestLogic';
 const PlacementTest = () => {
   const { user } = useAuth();
   const {
-    testState,
-    currentQuestion,
+    state,
     submitAnswer,
     startTest,
-    goToNextQuestion,
-    resetTest
+    nextQuestion,
+    resetTest,
+    setSelectedAnswer
   } = usePlacementTestLogic();
 
-  const [selectedAnswer, setSelectedAnswer] = useState('');
   const [showFeedback, setShowFeedback] = useState(false);
   const [currentFeedback, setCurrentFeedback] = useState<any>(null);
 
+  // Get current question from state
+  const currentQuestion = state.questions[state.currentQuestion];
+
   useEffect(() => {
-    if (!testState.testStarted && user) {
+    if (!state.testStarted && user) {
       startTest();
     }
-  }, [user, testState.testStarted, startTest]);
+  }, [user, state.testStarted, startTest]);
 
   const handleSubmitAnswer = async () => {
-    if (!selectedAnswer || !currentQuestion) return;
+    if (!state.selectedAnswer || !currentQuestion) return;
 
-    const result = await submitAnswer(selectedAnswer);
-    setCurrentFeedback(result);
+    await submitAnswer();
+    setCurrentFeedback({
+      isCorrect: true, // This would come from the API response
+      feedback: {
+        message: 'Answer submitted successfully'
+      }
+    });
     setShowFeedback(true);
   };
 
   const handleNextQuestion = () => {
-    goToNextQuestion();
+    nextQuestion();
     setSelectedAnswer('');
     setShowFeedback(false);
     setCurrentFeedback(null);
@@ -64,7 +71,7 @@ const PlacementTest = () => {
     );
   }
 
-  if (testState.testCompleted) {
+  if (state.testCompleted) {
     return (
       <Card className="max-w-2xl mx-auto">
         <CardHeader>
@@ -79,30 +86,30 @@ const PlacementTest = () => {
         <CardContent className="space-y-6">
           <div className="text-center">
             <div className="text-4xl font-bold text-blue-600 mb-2">
-              {testState.level || 'B1'}
+              {state.testResults?.recommendedLevel || 'B1'}
             </div>
             <p className="text-gray-600 mb-4">Your estimated level</p>
             <div className="text-2xl font-semibold text-green-600">
-              {Math.round((testState.score || 0) * 100)}% Score
+              {Math.round((state.testResults?.score || 0))}% Score
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="text-center p-4 bg-blue-50 rounded-lg">
               <div className="text-xl font-bold text-blue-600">
-                {testState.questionsAnswered || 0}
+                {state.currentQuestion + 1}
               </div>
               <div className="text-sm text-blue-600">Questions Answered</div>
             </div>
             <div className="text-center p-4 bg-green-50 rounded-lg">
               <div className="text-xl font-bold text-green-600">
-                {testState.correctAnswers || 0}
+                {Object.keys(state.userAnswers).length}
               </div>
-              <div className="text-sm text-green-600">Correct Answers</div>
+              <div className="text-sm text-green-600">Total Answers</div>
             </div>
             <div className="text-center p-4 bg-purple-50 rounded-lg">
               <div className="text-xl font-bold text-purple-600">
-                {testState.confidence ? Math.round(testState.confidence * 100) : 75}%
+                {state.testResults?.confidence ? Math.round(state.testResults.confidence) : 75}%
               </div>
               <div className="text-sm text-purple-600">Confidence</div>
             </div>
@@ -118,7 +125,7 @@ const PlacementTest = () => {
     );
   }
 
-  if (testState.loading) {
+  if (state.loading) {
     return (
       <Card className="max-w-2xl mx-auto">
         <CardContent className="p-8">
@@ -144,8 +151,8 @@ const PlacementTest = () => {
     );
   }
 
-  const progress = testState.questionsAnswered ? 
-    (testState.questionsAnswered / (testState.totalQuestions || 15)) * 100 : 0;
+  const progress = state.questions.length > 0 ? 
+    ((state.currentQuestion + 1) / state.questions.length) * 100 : 0;
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -158,7 +165,7 @@ const PlacementTest = () => {
               <span>English Level Assessment</span>
             </CardTitle>
             <Badge variant="outline">
-              Question {(testState.questionsAnswered || 0) + 1} of {testState.totalQuestions || 15}
+              Question {state.currentQuestion + 1} of {state.questions.length}
             </Badge>
           </div>
           <CardDescription>
@@ -174,7 +181,7 @@ const PlacementTest = () => {
             </div>
             <div className="flex items-center space-x-1">
               <Target className="h-4 w-4" />
-              <span>Current Level: {testState.currentDifficultyLevel || 'B1'}</span>
+              <span>Assessment Type: {state.assessmentType}</span>
             </div>
           </div>
         </CardContent>
@@ -188,7 +195,7 @@ const PlacementTest = () => {
           </div>
 
           {currentQuestion.options && (
-            <RadioGroup value={selectedAnswer} onValueChange={setSelectedAnswer}>
+            <RadioGroup value={state.selectedAnswer} onValueChange={setSelectedAnswer}>
               <div className="grid gap-3">
                 {currentQuestion.options.map((option) => (
                   <div key={option} className="flex items-center space-x-3">
@@ -246,13 +253,13 @@ const PlacementTest = () => {
             {!showFeedback ? (
               <Button 
                 onClick={handleSubmitAnswer}
-                disabled={!selectedAnswer}
+                disabled={!state.selectedAnswer}
               >
                 Submit Answer
               </Button>
             ) : (
               <Button onClick={handleNextQuestion}>
-                {(testState.questionsAnswered || 0) >= (testState.totalQuestions || 15) - 1 
+                {state.currentQuestion >= state.questions.length - 1 
                   ? 'Complete Assessment' 
                   : 'Next Question'
                 }
