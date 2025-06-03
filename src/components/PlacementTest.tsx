@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -205,12 +204,23 @@ const PlacementTest = () => {
     return <LoadingState message="Loading assessment questions..." />;
   }
 
-  const currentQuestion = currentState.questions[currentState.currentQuestionIndex || currentState.currentQuestion || 0];
+  // Fix: Use correct property names based on assessment type
+  const getCurrentQuestionIndex = () => {
+    if (isAdaptive) {
+      return (adaptiveState as any).currentQuestionIndex || 0;
+    } else {
+      return (regularState as any).currentQuestion || 0;
+    }
+  };
+
+  const currentQuestionIndex = getCurrentQuestionIndex();
+  const currentQuestion = currentState.questions[currentQuestionIndex];
+  
   if (!currentQuestion) {
     return <LoadingState message="Loading next question..." />;
   }
 
-  const questionNumber = (currentState.currentQuestionIndex || currentState.currentQuestion || 0) + 1;
+  const questionNumber = currentQuestionIndex + 1;
   const progress = ((questionNumber - 1) / currentState.questions.length) * 100;
 
   return (
@@ -234,11 +244,11 @@ const PlacementTest = () => {
             </div>
           </div>
           <Progress value={progress} className="h-2" />
-          {isAdaptive && currentState.adaptiveProgression && currentState.adaptiveProgression.length > 0 && (
+          {isAdaptive && (adaptiveState as any).adaptiveProgression && (adaptiveState as any).adaptiveProgression.length > 0 && (
             <div className="flex items-center justify-center mt-2 space-x-1">
               <span className="text-xs text-gray-500">Current level:</span>
               <Badge variant="outline" className="text-xs">
-                {currentState.currentDifficultyLevel || 'B1'}
+                {(adaptiveState as any).currentDifficultyLevel || 'B1'}
               </Badge>
             </div>
           )}
