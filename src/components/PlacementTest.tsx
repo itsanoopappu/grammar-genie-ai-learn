@@ -6,10 +6,20 @@ import { Progress } from '@/components/ui/progress';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle, Target, Clock, Brain } from 'lucide-react';
+import { CheckCircle, Target, Clock, Brain, XCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlacementTestLogic } from '@/hooks/usePlacementTestLogic';
+
+interface FeedbackData {
+  isCorrect: boolean;
+  feedback: {
+    message: string;
+    explanation?: string;
+  };
+  correctAnswer: string;
+  explanation?: string;
+}
 
 const PlacementTest = () => {
   const { user } = useAuth();
@@ -23,7 +33,7 @@ const PlacementTest = () => {
   } = usePlacementTestLogic();
 
   const [showFeedback, setShowFeedback] = useState(false);
-  const [currentFeedback, setCurrentFeedback] = useState<any>(null);
+  const [currentFeedback, setCurrentFeedback] = useState<FeedbackData | null>(null);
 
   // Get current question from state
   const currentQuestion = state.questions[state.currentQuestion];
@@ -37,14 +47,45 @@ const PlacementTest = () => {
   const handleSubmitAnswer = async () => {
     if (!state.selectedAnswer || !currentQuestion) return;
 
-    await submitAnswer();
-    setCurrentFeedback({
-      isCorrect: true, // This would come from the API response
-      feedback: {
-        message: 'Answer submitted successfully'
+    try {
+      await submitAnswer();
+      
+      // Get the actual result from the API
+      const { data: questionData } = await supabase
+        .from('test_questions')
+        .select('correct_answer, explanation')
+        .eq('id', currentQuestion.id)
+        .single();
+
+      if (questionData) {
+        const isCorrect = state.selectedAnswer.toLowerCase().trim() === 
+          questionData.correct_answer.toLowerCase().trim();
+        
+        setCurrentFeedback({
+          isCorrect,
+          feedback: {
+            message: isCorrect 
+              ? 'Correct! Well done.' 
+              : `Incorrect. The correct answer is: ${questionData.correct_answer}`,
+            explanation: questionData.explanation
+          },
+          correctAnswer: questionData.correct_answer,
+          explanation: questionData.explanation
+        });
       }
-    });
-    setShowFeedback(true);
+      
+      setShowFeedback(true);
+    } catch (error) {
+      console.error('Error submitting answer:', error);
+      setCurrentFeedback({
+        isCorrect: false,
+        feedback: {
+          message: 'Error submitting answer. Please try again.',
+        },
+        correctAnswer: currentQuestion.correct_answer || 'Unknown'
+      });
+      setShowFeedback(true);
+    }
   };
 
   const handleNextQuestion = () => {
@@ -224,9 +265,7 @@ const PlacementTest = () => {
                 {currentFeedback.isCorrect ? (
                   <CheckCircle className="h-5 w-5 text-green-600" />
                 ) : (
-                  <div className="h-5 w-5 rounded-full bg-red-600 flex items-center justify-center">
-                    <span className="text-white text-xs">✕</span>
-                  </div>
+                  <XCircle className="h-5 w-5 text-red-600" />
                 )}
                 <span className={`font-medium ${
                   currentFeedback.isCorrect ? 'text-green-800' : 'text-red-800'
@@ -235,15 +274,15 @@ const PlacementTest = () => {
                 </span>
               </div>
               
-              {!currentFeedback.isCorrect && (
-                <p className="text-blue-700 mb-2">
-                  <strong>Correct answer:</strong> {currentQuestion.correct_answer}
-                </p>
-              )}
+              <p className={`mb-2 ${
+                currentFeedback.isCorrect ? 'text-green-700' : 'text-red-700'
+              }`}>
+                {currentFeedback.feedback.message}
+              </p>
               
-              {currentQuestion.explanation && (
+              {currentFeedback.explanation && (
                 <p className="text-gray-700 text-sm">
-                  {currentQuestion.explanation}
+                  <strong>Explanation:</strong> {currentFeedback.explanation}
                 </p>
               )}
             </div>

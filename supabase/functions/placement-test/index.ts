@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import "https://deno.land/x/xhr@0.1.0/mod.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -563,15 +564,14 @@ async function selectComprehensiveQuestions(supabaseClient: any, userId: string,
         levelSelected.push(question);
         usedGrammarTopics.add(question.grammar_topic);
         
-        // Track grammar usage
+        // Track grammar usage - Fixed: removed .on('conflict') which doesn't exist
         await supabaseClient
           .from('test_grammar_usage')
           .insert({
             test_id: testId,
             grammar_topic: question.grammar_topic,
             grammar_category: question.grammar_category
-          })
-          .on('conflict', () => {});
+          });
       }
     }
     
@@ -602,8 +602,7 @@ async function selectComprehensiveQuestions(supabaseClient: any, userId: string,
           test_id: testId,
           grammar_topic: question.grammar_topic,
           grammar_category: question.grammar_category
-        })
-        .on('conflict', () => {});
+        });
     }
   }
 
