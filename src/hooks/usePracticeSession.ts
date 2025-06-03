@@ -1,18 +1,33 @@
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
-import { PracticeSession } from '@/types/exercise';
+import { Exercise, ExerciseAttempt } from '@/types/exercise';
 
-export const usePracticeSession = (topicId: string) => {
+interface SessionResults {
+  totalQuestions: number;
+  correctAnswers: number;
+  accuracy: number;
+  xpEarned: number;
+}
+
+export const usePracticeSession = (exercises: Exercise[]) => {
   const { user } = useAuth();
-  const queryClient = useQueryClient();
+  const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
+  const [score, setScore] = useState(0);
+  const [feedback, setFeedback] = useState<any>(null);
+  const [userAnswer, setUserAnswer] = useState('');
+  const [selectedOption, setSelectedOption] = useState('');
+  const [sessionCompleted, setSessionCompleted] = useState(false);
+  const [sessionResults, setSessionResults] = useState<SessionResults | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const createSessionMutation = useMutation({
-    mutationFn: async () => {
-      if (!user) throw new Error('User not authenticated');
+  const createSession = async (topicId: string) => {
+    if (!user) return;
 
-      const { data: session, error: sessionError } = await supabase
+    try {
+      const { data: session, error } = await supabase
         .from('practice_sessions')
         .insert({
           user_id: user.id,
@@ -23,87 +38,104 @@ export const usePracticeSession = (topicId: string) => {
         .select()
         .single();
 
-      if (sessionError) throw sessionError;
-      return session;
-    },
-    onSuccess: (session) => {
-      // Cache the new session
-      queryClient.setQueryData(['current-session', topicId], session);
-    },
-  });
-
-  const updateProgressMutation = useMutation({
-    mutationFn: async ({ sessionId, isCorrect }: { sessionId: string; isCorrect: boolean }) => {
-      const { data: currentSession } = await supabase
-        .from('practice_sessions')
-        .select('exercises_attempted, exercises_correct')
-        .eq('id', sessionId)
-        .single();
-
-      if (currentSession) {
-        const { error } = await supabase
-          .from('practice_sessions')
-          .update({
-            exercises_attempted: (currentSession.exercises_attempted || 0) + 1,
-            exercises_correct: (currentSession.exercises_correct || 0) + (isCorrect ? 1 : 0)
-          })
-          .eq('id', sessionId);
-
-        if (error) throw error;
-      }
-
-      return currentSession;
-    },
-    onMutate: async ({ sessionId, isCorrect }) => {
-      // Optimistically update the UI
-      const queryKey = ['current-session', topicId];
-      await queryClient.cancelQueries({ queryKey });
-
-      const previousSession = queryClient.getQueryData(queryKey);
-      
-      if (previousSession) {
-        queryClient.setQueryData(queryKey, (old: any) => ({
-          ...old,
-          exercises_attempted: (old.exercises_attempted || 0) + 1,
-          exercises_correct: (old.exercises_correct || 0) + (isCorrect ? 1 : 0)
-        }));
-      }
-
-      return { previousSession };
-    },
-    onError: (err, variables, context) => {
-      // Rollback optimistic update on error
-      if (context?.previousSession) {
-        queryClient.setQueryData(['current-session', topicId], context.previousSession);
-      }
-    },
-  });
-
-  const completeSessionMutation = useMutation({
-    mutationFn: async (sessionId: string) => {
-      const { error } = await supabase
-        .from('practice_sessions')
-        .update({
-          completed_at: new Date().toISOString()
-        })
-        .eq('id', sessionId);
-
       if (error) throw error;
-    },
-    onSuccess: () => {
-      // Clear current session and refresh user progress
-      queryClient.removeQueries({ queryKey: ['current-session', topicId] });
-      queryClient.invalidateQueries({ queryKey: ['user-progress'] });
-    },
-  });
+      setSessionId(session.id);
+    } catch (err) {
+      console.error('Error creating session:', err);
+    }
+  };
+
+  const submitAnswer = async () => {
+    if (!exercises[currentExerciseIndex] || !sessionId) return;
+
+    setLoading(true);
+    const currentExercise = exercises[currentExerciseIndex];
+    const answer = currentExercise.type === 'multiple-choice' ? selectedOption : userAnswer;
+
+    try {
+      const correctAnswer = currentExercise.content.correct_answer;
+      const isCorrect = answer.toLowerCase().trim() === correctAnswer.toLowerCase().trim();
+
+      // Save attempt
+      const attemptData: Omit<ExerciseAttempt, 'id'> = {
+        user_id: user!.id,
+        exercise_id: currentExercise.id,
+        session_id: sessionId,
+        user_answer: { answer },
+        is_correct: isCorrect,
+        time_taken_seconds: 30,
+        difficulty_at_attempt: currentExercise.difficulty_level
+      };
+
+      await supabase.from('exercise_attempts').insert(attemptData);
+
+      // Update score
+      if (isCorrect) {
+        setScore(prev => prev + 1);
+      }
+
+      // Set feedback
+      setFeedback({
+        isCorrect,
+        feedback: {
+          message: isCorrect ? 'Correct! Well done.' : `Incorrect. The correct answer is: ${correctAnswer}`,
+          tip: currentExercise.content.explanation
+        },
+        correctAnswer,
+        explanation: currentExercise.content.explanation
+      });
+
+    } catch (err) {
+      console.error('Error submitting answer:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadNextExercise = () => {
+    if (currentExerciseIndex < exercises.length - 1) {
+      setCurrentExerciseIndex(prev => prev + 1);
+      setUserAnswer('');
+      setSelectedOption('');
+      setFeedback(null);
+    } else {
+      // Complete session
+      const results: SessionResults = {
+        totalQuestions: exercises.length,
+        correctAnswers: score,
+        accuracy: (score / exercises.length) * 100,
+        xpEarned: score * 10
+      };
+      setSessionResults(results);
+      setSessionCompleted(true);
+    }
+  };
+
+  const restartSession = () => {
+    setCurrentExerciseIndex(0);
+    setScore(0);
+    setFeedback(null);
+    setUserAnswer('');
+    setSelectedOption('');
+    setSessionCompleted(false);
+    setSessionResults(null);
+  };
 
   return {
-    createSession: createSessionMutation.mutate,
-    isCreatingSession: createSessionMutation.isPending,
-    updateProgress: updateProgressMutation.mutate,
-    isUpdatingProgress: updateProgressMutation.isPending,
-    completeSession: completeSessionMutation.mutate,
-    isCompletingSession: completeSessionMutation.isPending,
-    currentSession: queryClient.getQueryData(['current-session', topicId]) as PracticeSession | undefined,
+    currentExerciseIndex,
+    score,
+    feedback,
+    userAnswer,
+    selectedOption,
+    sessionCompleted,
+    sessionResults,
+    loading,
+    setCurrentExerciseIndex,
+    setUserAnswer,
+    setSelectedOption,
+    submitAnswer,
+    loadNextExercise,
+    restartSession,
+    createSession
   };
 };

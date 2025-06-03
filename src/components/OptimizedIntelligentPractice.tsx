@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+
+import { useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, CheckCircle, Target, Clock, Lightbulb } from 'lucide-react';
 import { useOptimizedExercises } from '@/hooks/useOptimizedExercises';
+import { usePracticeSession } from '@/hooks/usePracticeSession';
 import ExerciseDisplay from './ExerciseDisplay';
 import ExerciseFeedback from './ExerciseFeedback';
 import LoadingState from './LoadingState';
@@ -18,26 +20,32 @@ const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> 
   topicId, 
   onBackToTopics 
 }) => {
-  const { 
-    exercises, 
-    loading, 
-    error, 
-    sessionCompleted, 
-    sessionResults, 
-    currentExerciseIndex, 
-    score, 
-    feedback, 
-    userAnswer, 
-    selectedOption, 
-    setCurrentExerciseIndex, 
-    setUserAnswer, 
-    setSelectedOption, 
-    submitAnswer, 
-    loadNextExercise, 
-    restartSession 
-  } = useOptimizedExercises(topicId);
+  const { exercises, isLoading, error } = useOptimizedExercises(topicId);
+  
+  const {
+    currentExerciseIndex,
+    score,
+    feedback,
+    userAnswer,
+    selectedOption,
+    sessionCompleted,
+    sessionResults,
+    loading,
+    setUserAnswer,
+    setSelectedOption,
+    submitAnswer,
+    loadNextExercise,
+    restartSession,
+    createSession
+  } = usePracticeSession(exercises);
 
-  if (loading) {
+  useEffect(() => {
+    if (exercises.length > 0 && topicId) {
+      createSession(topicId);
+    }
+  }, [exercises.length, topicId]);
+
+  if (isLoading) {
     return <LoadingState message="Loading practice exercises..." />;
   }
 
@@ -46,7 +54,7 @@ const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> 
       <Card className="border-red-200">
         <CardContent className="p-6">
           <div className="text-center">
-            <div className="text-red-600 mb-4">Error loading exercises: {error}</div>
+            <div className="text-red-600 mb-4">Error loading exercises: {error.message}</div>
             {onBackToTopics && (
               <Button onClick={onBackToTopics} variant="outline">
                 <ArrowLeft className="h-4 w-4 mr-2" />
@@ -133,7 +141,6 @@ const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> 
 
   return (
     <div className="space-y-6">
-      {/* Header with back button */}
       {onBackToTopics && (
         <Button 
           onClick={onBackToTopics} 
@@ -146,7 +153,6 @@ const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> 
         </Button>
       )}
 
-      {/* Progress Card */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -180,7 +186,6 @@ const OptimizedIntelligentPractice: React.FC<OptimizedIntelligentPracticeProps> 
         </CardContent>
       </Card>
 
-      {/* Exercise Card */}
       <Card>
         <CardContent className="p-6">
           <ExerciseDisplay
