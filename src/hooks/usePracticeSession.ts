@@ -1,44 +1,18 @@
 
-import { useState, useCallback } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
-import { Exercise, ExerciseAttempt } from '@/types/exercise';
+import { PracticeSession } from '@/types/exercise';
 
-interface SessionResults {
-  totalQuestions: number;
-  correctAnswers: number;
-  accuracy: number;
-  xpEarned: number;
-}
-
-interface FeedbackData {
-  isCorrect: boolean;
-  feedback: {
-    message: string;
-    tip?: string;
-    explanation?: string;
-  };
-  correctAnswer: string;
-  explanation?: string;
-}
-
-export const usePracticeSession = (exercises: Exercise[]) => {
+export const usePracticeSession = (topicId: string) => {
   const { user } = useAuth();
-  const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
-  const [score, setScore] = useState(0);
-  const [feedback, setFeedback] = useState<FeedbackData | null>(null);
-  const [userAnswer, setUserAnswer] = useState('');
-  const [selectedOption, setSelectedOption] = useState('');
-  const [sessionCompleted, setSessionCompleted] = useState(false);
-  const [sessionResults, setSessionResults] = useState<SessionResults | null>(null);
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
 
-  const createSession = useCallback(async (topicId: string) => {
-    if (!user) return;
+  const createSessionMutation = useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error('User not authenticated');
 
-    try {
-      const { data: session, error } = await supabase
+      const { data: session, error: sessionError } = await supabase
         .from('practice_sessions')
         .insert({
           user_id: user.id,
@@ -49,123 +23,87 @@ export const usePracticeSession = (exercises: Exercise[]) => {
         .select()
         .single();
 
+      if (sessionError) throw sessionError;
+      return session;
+    },
+    onSuccess: (session) => {
+      // Cache the new session
+      queryClient.setQueryData(['current-session', topicId], session);
+    },
+  });
+
+  const updateProgressMutation = useMutation({
+    mutationFn: async ({ sessionId, isCorrect }: { sessionId: string; isCorrect: boolean }) => {
+      const { data: currentSession } = await supabase
+        .from('practice_sessions')
+        .select('exercises_attempted, exercises_correct')
+        .eq('id', sessionId)
+        .single();
+
+      if (currentSession) {
+        const { error } = await supabase
+          .from('practice_sessions')
+          .update({
+            exercises_attempted: (currentSession.exercises_attempted || 0) + 1,
+            exercises_correct: (currentSession.exercises_correct || 0) + (isCorrect ? 1 : 0)
+          })
+          .eq('id', sessionId);
+
+        if (error) throw error;
+      }
+
+      return currentSession;
+    },
+    onMutate: async ({ sessionId, isCorrect }) => {
+      // Optimistically update the UI
+      const queryKey = ['current-session', topicId];
+      await queryClient.cancelQueries({ queryKey });
+
+      const previousSession = queryClient.getQueryData(queryKey);
+      
+      if (previousSession) {
+        queryClient.setQueryData(queryKey, (old: any) => ({
+          ...old,
+          exercises_attempted: (old.exercises_attempted || 0) + 1,
+          exercises_correct: (old.exercises_correct || 0) + (isCorrect ? 1 : 0)
+        }));
+      }
+
+      return { previousSession };
+    },
+    onError: (err, variables, context) => {
+      // Rollback optimistic update on error
+      if (context?.previousSession) {
+        queryClient.setQueryData(['current-session', topicId], context.previousSession);
+      }
+    },
+  });
+
+  const completeSessionMutation = useMutation({
+    mutationFn: async (sessionId: string) => {
+      const { error } = await supabase
+        .from('practice_sessions')
+        .update({
+          completed_at: new Date().toISOString()
+        })
+        .eq('id', sessionId);
+
       if (error) throw error;
-      setSessionId(session.id);
-      return session.id;
-    } catch (err) {
-      console.error('Error creating session:', err);
-      return null;
-    }
-  }, [user]);
-
-  const submitAnswer = useCallback(async () => {
-    if (!exercises[currentExerciseIndex] || !sessionId || !user) return;
-
-    setLoading(true);
-    const currentExercise = exercises[currentExerciseIndex];
-    const answer = currentExercise.type === 'multiple-choice' ? selectedOption : userAnswer;
-
-    try {
-      const correctAnswer = currentExercise.content.correct_answer;
-      const isCorrect = answer.toLowerCase().trim() === correctAnswer.toLowerCase().trim();
-
-      // Save attempt with proper error handling
-      const attemptData: Omit<ExerciseAttempt, 'id'> = {
-        user_id: user.id,
-        exercise_id: currentExercise.id,
-        session_id: sessionId,
-        user_answer: { answer },
-        is_correct: isCorrect,
-        time_taken_seconds: 30,
-        difficulty_at_attempt: currentExercise.difficulty_level
-      };
-
-      const { error: attemptError } = await supabase
-        .from('exercise_attempts')
-        .insert(attemptData);
-
-      if (attemptError) {
-        console.error('Error saving attempt:', attemptError);
-      }
-
-      // Update score
-      if (isCorrect) {
-        setScore(prev => prev + 1);
-      }
-
-      // Set proper feedback with detailed information
-      setFeedback({
-        isCorrect,
-        feedback: {
-          message: isCorrect 
-            ? 'Correct! Well done.' 
-            : `Incorrect. The correct answer is: ${correctAnswer}`,
-          tip: currentExercise.content.explanation,
-          explanation: currentExercise.content.explanation
-        },
-        correctAnswer,
-        explanation: currentExercise.content.explanation
-      });
-
-    } catch (err) {
-      console.error('Error submitting answer:', err);
-      setFeedback({
-        isCorrect: false,
-        feedback: {
-          message: 'Error submitting answer. Please try again.',
-        },
-        correctAnswer: currentExercise.content.correct_answer
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [exercises, currentExerciseIndex, sessionId, user, selectedOption, userAnswer]);
-
-  const loadNextExercise = useCallback(() => {
-    if (currentExerciseIndex < exercises.length - 1) {
-      setCurrentExerciseIndex(prev => prev + 1);
-      setUserAnswer('');
-      setSelectedOption('');
-      setFeedback(null);
-    } else {
-      // Complete session with proper results calculation
-      const results: SessionResults = {
-        totalQuestions: exercises.length,
-        correctAnswers: score,
-        accuracy: exercises.length > 0 ? (score / exercises.length) * 100 : 0,
-        xpEarned: score * 10
-      };
-      setSessionResults(results);
-      setSessionCompleted(true);
-    }
-  }, [currentExerciseIndex, exercises.length, score]);
-
-  const restartSession = useCallback(() => {
-    setCurrentExerciseIndex(0);
-    setScore(0);
-    setFeedback(null);
-    setUserAnswer('');
-    setSelectedOption('');
-    setSessionCompleted(false);
-    setSessionResults(null);
-    setSessionId(null);
-  }, []);
+    },
+    onSuccess: () => {
+      // Clear current session and refresh user progress
+      queryClient.removeQueries({ queryKey: ['current-session', topicId] });
+      queryClient.invalidateQueries({ queryKey: ['user-progress'] });
+    },
+  });
 
   return {
-    currentExerciseIndex,
-    score,
-    feedback,
-    userAnswer,
-    selectedOption,
-    sessionCompleted,
-    sessionResults,
-    loading,
-    setCurrentExerciseIndex,
-    setUserAnswer,
-    setSelectedOption,
-    submitAnswer,
-    loadNextExercise,
-    restartSession,
-    createSession
+    createSession: createSessionMutation.mutate,
+    isCreatingSession: createSessionMutation.isPending,
+    updateProgress: updateProgressMutation.mutate,
+    isUpdatingProgress: updateProgressMutation.isPending,
+    completeSession: completeSessionMutation.mutate,
+    isCompletingSession: completeSessionMutation.isPending,
+    currentSession: queryClient.getQueryData(['current-session', topicId]) as PracticeSession | undefined,
   };
 };
