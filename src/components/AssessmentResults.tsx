@@ -1,489 +1,448 @@
 
-import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Button } from '@/components/ui/button';
+import { CheckCircle, XCircle, Target, BookOpen, TrendingUp, AlertTriangle } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CheckCircle, XCircle, Target, TrendingUp, BookOpen, Clock, Award, Brain } from 'lucide-react';
 
 interface QuestionReview {
+  id: string;
   question: string;
   userAnswer: string;
   correctAnswer: string;
   isCorrect: boolean;
   explanation: string;
-  detailedExplanation?: string;
-  firstPrinciplesExplanation?: string;
-  level: string;
-  grammarCategory: string;
   grammarTopic: string;
-  pointsEarned: number;
-  hasCompleteMetadata: boolean;
+  level: string;
+  options?: string[];
 }
 
-interface GrammarPerformance {
-  correct: number;
-  total: number;
+interface WeakArea {
+  topic: string;
+  category: string;
   accuracy: number;
+  questionsAttempted: number;
+  level: string;
+  recommendations: string[];
 }
 
-interface TestResults {
-  score: number;
-  weightedScore?: number;
-  totalPossibleScore?: number;
-  recommendedLevel: string;
-  confidence?: number;
-  totalQuestions: number;
-  questionsAnswered: number;
-  adaptiveProgression?: string[];
-  levelBreakdown: Record<string, { correct: number; total: number; points: number }>;
-  grammarBreakdown?: Record<string, GrammarPerformance>;
-  grammarTopicsUsed?: number;
-  xpEarned: number;
-  detailedFeedback: {
-    message: string;
-    nextSteps: string[];
-    questionReview?: QuestionReview[];
-  };
+interface StrengthArea {
+  topic: string;
+  category: string;
+  accuracy: number;
+  questionsAttempted: number;
+  level: string;
+}
+
+interface PracticeDrill {
+  id: string;
+  title: string;
+  description: string;
+  topic: string;
+  level: string;
+  estimatedTime: number;
+  exercises: number;
+  priority: 'high' | 'medium' | 'low';
 }
 
 interface AssessmentResultsProps {
-  results: TestResults;
-  onRetakeTest: () => void;
-  onContinuePractice?: () => void;
+  results: {
+    score: number;
+    weightedScore: number;
+    recommendedLevel: string;
+    confidence: number;
+    totalQuestions: number;
+    questionsAnswered: number;
+    levelBreakdown: Record<string, { correct: number; total: number; accuracy: number }>;
+    grammarBreakdown: Record<string, { correct: number; total: number; accuracy: number }>;
+    detailedFeedback: {
+      message: string;
+      nextSteps: string[];
+    };
+  };
+  questionReviews: QuestionReview[];
+  onRestart: () => void;
 }
 
-const AssessmentResults: React.FC<AssessmentResultsProps> = ({
-  results,
-  onRetakeTest,
-  onContinuePractice
+const AssessmentResults: React.FC<AssessmentResultsProps> = ({ 
+  results, 
+  questionReviews, 
+  onRestart 
 }) => {
-  // Calculate current week (placeholder logic)
-  const getCurrentWeek = () => {
-    const startDate = new Date('2024-01-01'); // Placeholder start date
-    const currentDate = new Date();
-    const diffTime = Math.abs(currentDate.getTime() - startDate.getTime());
-    const diffWeeks = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 7));
-    return diffWeeks;
-  };
+  // Analyze weak areas (accuracy < 60%)
+  const weakAreas: WeakArea[] = Object.entries(results.grammarBreakdown)
+    .filter(([_, performance]) => performance.accuracy < 0.6 && performance.total > 0)
+    .map(([topic, performance]) => ({
+      topic,
+      category: 'Grammar',
+      accuracy: performance.accuracy,
+      questionsAttempted: performance.total,
+      level: results.recommendedLevel,
+      recommendations: [
+        `Practice ${topic.toLowerCase()} exercises daily`,
+        `Review ${topic.toLowerCase()} rules and examples`,
+        `Complete focused drills on ${topic.toLowerCase()}`
+      ]
+    }))
+    .sort((a, b) => a.accuracy - b.accuracy);
 
-  // Identify strong and weak grammar topics
-  const getGrammarAnalysis = () => {
-    if (!results.grammarBreakdown) {
-      return { strongTopics: [], weakTopics: [] };
+  // Analyze strength areas (accuracy >= 80%)
+  const strengthAreas: StrengthArea[] = Object.entries(results.grammarBreakdown)
+    .filter(([_, performance]) => performance.accuracy >= 0.8 && performance.total > 0)
+    .map(([topic, performance]) => ({
+      topic,
+      category: 'Grammar',
+      accuracy: performance.accuracy,
+      questionsAttempted: performance.total,
+      level: results.recommendedLevel
+    }))
+    .sort((a, b) => b.accuracy - a.accuracy);
+
+  // Generate practice drills based on weak areas
+  const practicedrills: PracticeDrill[] = weakAreas.slice(0, 5).map((weak, index) => ({
+    id: `drill-${index}`,
+    title: `${weak.topic} Intensive Practice`,
+    description: `Focused exercises to improve your ${weak.topic.toLowerCase()} skills`,
+    topic: weak.topic,
+    level: weak.level,
+    estimatedTime: 15 + (index * 5),
+    exercises: 10 + (index * 2),
+    priority: weak.accuracy < 0.3 ? 'high' : weak.accuracy < 0.5 ? 'medium' : 'low'
+  }));
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'high': return 'destructive';
+      case 'medium': return 'default';
+      case 'low': return 'secondary';
+      default: return 'default';
     }
-
-    const strongTopics = Object.entries(results.grammarBreakdown)
-      .filter(([_, performance]) => performance.accuracy >= 0.7)
-      .map(([topic, performance]) => ({
-        topic,
-        accuracy: performance.accuracy,
-        correct: performance.correct,
-        total: performance.total
-      }))
-      .sort((a, b) => b.accuracy - a.accuracy);
-
-    const weakTopics = Object.entries(results.grammarBreakdown)
-      .filter(([_, performance]) => performance.accuracy < 0.7)
-      .map(([topic, performance]) => ({
-        topic,
-        accuracy: performance.accuracy,
-        correct: performance.correct,
-        total: performance.total
-      }))
-      .sort((a, b) => a.accuracy - b.accuracy);
-
-    return { strongTopics, weakTopics };
   };
 
-  const { strongTopics, weakTopics } = getGrammarAnalysis();
-  const currentWeek = getCurrentWeek();
-
-  const formatDuration = (seconds: number) => {
-    const minutes = Math.floor(seconds / 60);
-    return `${minutes} minutes`;
-  };
-
-  const getPracticeRecommendation = (topic: string, accuracy: number) => {
-    if (accuracy < 0.3) return { level: 'Beginner', sessions: '5-7 sessions' };
-    if (accuracy < 0.5) return { level: 'Basic', sessions: '3-4 sessions' };
-    return { level: 'Intermediate', sessions: '2-3 sessions' };
+  const getLevelColor = (level: string) => {
+    const colors = {
+      'A1': 'bg-green-100 text-green-800',
+      'A2': 'bg-blue-100 text-blue-800',
+      'B1': 'bg-yellow-100 text-yellow-800',
+      'B2': 'bg-orange-100 text-orange-800',
+      'C1': 'bg-purple-100 text-purple-800',
+      'C2': 'bg-red-100 text-red-800'
+    };
+    return colors[level as keyof typeof colors] || 'bg-gray-100 text-gray-800';
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      {/* Enhanced Session Summary */}
-      <Card className="bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200">
-        <CardHeader className="text-center">
-          <div className="flex items-center justify-center space-x-2 mb-2">
-            <Award className="h-6 w-6 text-blue-600" />
-            <CardTitle className="text-2xl text-blue-800">Assessment Complete!</CardTitle>
-          </div>
-          <CardDescription className="text-lg">
-            Week {currentWeek} of your learning journey • {results.questionsAnswered}/{results.totalQuestions} questions answered
+    <div className="space-y-6">
+      {/* Overall Results Card */}
+      <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <Target className="h-6 w-6 text-blue-600" />
+            <span>Assessment Complete!</span>
+          </CardTitle>
+          <CardDescription>
+            Your English level assessment results and personalized recommendations
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="text-center">
-              <div className="text-3xl font-bold text-blue-600">{Math.round(results.score)}%</div>
-              <div className="text-sm text-gray-600">Overall Score</div>
+              <div className={`inline-flex items-center px-4 py-2 rounded-full text-lg font-semibold ${getLevelColor(results.recommendedLevel)}`}>
+                Your Level: {results.recommendedLevel}
+              </div>
+              <p className="text-sm text-gray-600 mt-2">
+                {results.confidence}% confidence
+              </p>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-purple-600">{results.recommendedLevel}</div>
-              <div className="text-sm text-gray-600">Your Level</div>
+              <div className="text-2xl font-bold text-gray-900">
+                {Math.round(results.score)}%
+              </div>
+              <p className="text-sm text-gray-600">Overall Score</p>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-green-600">{strongTopics.length}</div>
-              <div className="text-sm text-gray-600">Strong Topics</div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-orange-600">{results.xpEarned}</div>
-              <div className="text-sm text-gray-600">XP Earned</div>
+              <div className="text-2xl font-bold text-gray-900">
+                {results.questionsAnswered}/{results.totalQuestions}
+              </div>
+              <p className="text-sm text-gray-600">Questions Completed</p>
             </div>
           </div>
-
-          {results.adaptiveProgression && results.adaptiveProgression.length > 1 && (
-            <div className="text-center p-4 bg-white/50 rounded-lg">
-              <div className="text-sm text-gray-600 mb-2">Adaptive Level Progression</div>
-              <div className="flex items-center justify-center space-x-2">
-                {results.adaptiveProgression.map((level, index) => (
-                  <React.Fragment key={level}>
-                    <Badge variant="outline" className="bg-white">
-                      {level}
-                    </Badge>
-                    {index < results.adaptiveProgression!.length - 1 && (
-                      <span className="text-gray-400">→</span>
-                    )}
-                  </React.Fragment>
-                ))}
-              </div>
-            </div>
-          )}
+          <Progress value={results.score} className="h-3" />
+          <p className="text-sm text-gray-700">{results.detailedFeedback.message}</p>
         </CardContent>
       </Card>
 
       {/* Detailed Analysis Tabs */}
-      <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="w-full bg-white/80 backdrop-blur-sm">
-          <TabsTrigger value="overview" className="flex items-center space-x-2 flex-1">
-            <TrendingUp className="h-4 w-4" />
-            <span>Overview</span>
-          </TabsTrigger>
-          <TabsTrigger value="questions" className="flex items-center space-x-2 flex-1">
-            <Brain className="h-4 w-4" />
-            <span>Question Review</span>
-          </TabsTrigger>
-          <TabsTrigger value="topics" className="flex items-center space-x-2 flex-1">
-            <Target className="h-4 w-4" />
-            <span>Topic Analysis</span>
-          </TabsTrigger>
-          <TabsTrigger value="practice" className="flex items-center space-x-2 flex-1">
-            <BookOpen className="h-4 w-4" />
-            <span>Practice Plan</span>
-          </TabsTrigger>
+      <Tabs defaultValue="analysis" className="w-full">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="analysis">Analysis</TabsTrigger>
+          <TabsTrigger value="review">Question Review</TabsTrigger>
+          <TabsTrigger value="drills">Practice Drills</TabsTrigger>
+          <TabsTrigger value="progress">Next Steps</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="mt-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Your Strengths */}
+        <TabsContent value="analysis" className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Strengths */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center space-x-2 text-green-700">
-                  <CheckCircle className="h-5 w-5" />
+                <CardTitle className="flex items-center space-x-2">
+                  <CheckCircle className="h-5 w-5 text-green-600" />
                   <span>Your Strengths</span>
                 </CardTitle>
-                <CardDescription>Grammar topics where you performed well (≥70% accuracy)</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  {strongTopics.length > 0 ? (
-                    strongTopics.map((topic, index) => (
+                {strengthAreas.length > 0 ? (
+                  <div className="space-y-3">
+                    {strengthAreas.map((strength, index) => (
                       <div key={index} className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
                         <div>
-                          <div className="font-medium text-green-800">{topic.topic}</div>
-                          <div className="text-sm text-green-600">
-                            {topic.correct}/{topic.total} correct
+                          <div className="font-medium text-green-900">{strength.topic}</div>
+                          <div className="text-sm text-green-700">
+                            {strength.questionsAttempted} questions
                           </div>
                         </div>
-                        <div className="flex items-center space-x-2">
-                          <Badge className="bg-green-100 text-green-800">
-                            {Math.round(topic.accuracy * 100)}%
-                          </Badge>
-                          <div className="text-green-600">
-                            {topic.accuracy >= 0.9 ? '🏆' : topic.accuracy >= 0.8 ? '⭐' : '✅'}
+                        <div className="text-right">
+                          <div className="font-bold text-green-800">
+                            {Math.round(strength.accuracy * 100)}%
                           </div>
                         </div>
                       </div>
-                    ))
-                  ) : (
-                    <div className="text-center text-gray-500 py-4">
-                      <Target className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-                      <p>Complete more questions to identify your strengths!</p>
-                    </div>
-                  )}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-center py-4">
+                    Complete more questions to identify your strengths
+                  </p>
+                )}
               </CardContent>
             </Card>
 
-            {/* Areas to Improve */}
+            {/* Weak Areas */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center space-x-2 text-orange-700">
-                  <Target className="h-5 w-5" />
-                  <span>Areas to Improve</span>
+                <CardTitle className="flex items-center space-x-2">
+                  <AlertTriangle className="h-5 w-5 text-orange-600" />
+                  <span>Areas for Improvement</span>
                 </CardTitle>
-                <CardDescription>Grammar topics that need more practice (&lt;70% accuracy)</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  {weakTopics.length > 0 ? (
-                    weakTopics.map((topic, index) => (
+                {weakAreas.length > 0 ? (
+                  <div className="space-y-3">
+                    {weakAreas.map((weak, index) => (
                       <div key={index} className="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
-                        <div className="flex-1">
-                          <div className="font-medium text-orange-800">{topic.topic}</div>
-                          <div className="text-sm text-orange-600">
-                            {topic.correct}/{topic.total} correct
-                          </div>
-                          <div className="mt-1">
-                            <Progress 
-                              value={topic.accuracy * 100} 
-                              className="h-2 bg-orange-100"
-                            />
+                        <div>
+                          <div className="font-medium text-orange-900">{weak.topic}</div>
+                          <div className="text-sm text-orange-700">
+                            {weak.questionsAttempted} questions
                           </div>
                         </div>
-                        <div className="ml-4 text-right">
-                          <Badge variant="outline" className="text-orange-700 border-orange-300">
-                            {Math.round(topic.accuracy * 100)}%
-                          </Badge>
-                          <div className="text-xs text-orange-600 mt-1">
-                            Needs practice
+                        <div className="text-right">
+                          <div className="font-bold text-orange-800">
+                            {Math.round(weak.accuracy * 100)}%
                           </div>
                         </div>
                       </div>
-                    ))
-                  ) : (
-                    <div className="text-center text-gray-500 py-4">
-                      <CheckCircle className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-                      <p>Great job! No major areas need improvement.</p>
-                    </div>
-                  )}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-center py-4">
+                    Great job! No major weak areas identified
+                  </p>
+                )}
               </CardContent>
             </Card>
           </div>
         </TabsContent>
 
-        <TabsContent value="questions" className="mt-6">
+        <TabsContent value="review" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Complete Question Diagnosis</CardTitle>
-              <CardDescription>Detailed review of each question with explanations</CardDescription>
+              <CardTitle className="flex items-center space-x-2">
+                <BookOpen className="h-5 w-5 text-blue-600" />
+                <span>Question by Question Review</span>
+              </CardTitle>
+              <CardDescription>
+                Review your answers with detailed explanations
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {results.detailedFeedback.questionReview?.map((question, index) => (
-                  <div key={index} className={`p-4 rounded-lg border-l-4 ${
-                    question.isCorrect 
-                      ? 'bg-green-50 border-green-400' 
-                      : 'bg-red-50 border-red-400'
-                  }`}>
+                {questionReviews.map((review, index) => (
+                  <div key={review.id} className="border rounded-lg p-4">
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex items-center space-x-2">
-                        {question.isCorrect ? (
+                        <span className="font-medium">Question {index + 1}</span>
+                        <Badge variant={review.isCorrect ? "default" : "destructive"}>
+                          {review.grammarTopic}
+                        </Badge>
+                        <Badge variant="outline">{review.level}</Badge>
+                      </div>
+                      <div className="flex items-center space-x-1">
+                        {review.isCorrect ? (
                           <CheckCircle className="h-5 w-5 text-green-600" />
                         ) : (
                           <XCircle className="h-5 w-5 text-red-600" />
                         )}
-                        <span className="font-medium">Question {index + 1}</span>
-                        <Badge variant="outline">{question.level}</Badge>
-                        <Badge className="bg-blue-100 text-blue-800">{question.grammarCategory}</Badge>
-                      </div>
-                      <div className="text-right">
-                        <div className={`font-bold ${question.isCorrect ? 'text-green-600' : 'text-red-600'}`}>
-                          {question.pointsEarned > 0 ? '+' : ''}{question.pointsEarned} pts
-                        </div>
-                        <div className="text-xs text-gray-500">{question.grammarTopic}</div>
                       </div>
                     </div>
-
+                    
                     <div className="space-y-3">
                       <div>
-                        <div className="font-medium text-gray-800 mb-1">Question:</div>
-                        <div className="text-gray-700">{question.question}</div>
+                        <p className="font-medium text-gray-900">{review.question}</p>
                       </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <div className="text-sm font-medium text-gray-600">Your Answer:</div>
-                          <div className={`p-2 rounded ${
-                            question.isCorrect ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                          }`}>
-                            {question.userAnswer}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium text-gray-600">Correct Answer:</div>
-                          <div className="p-2 rounded bg-green-100 text-green-800">
-                            {question.correctAnswer}
-                          </div>
-                        </div>
-                      </div>
-
-                      {question.explanation && (
-                        <div>
-                          <div className="text-sm font-medium text-gray-600 mb-1">Explanation:</div>
-                          <div className="text-gray-700 text-sm">{question.explanation}</div>
+                      
+                      {review.options && (
+                        <div className="grid grid-cols-2 gap-2">
+                          {review.options.map((option, optIndex) => (
+                            <div 
+                              key={optIndex}
+                              className={`p-2 rounded text-sm ${
+                                option === review.correctAnswer 
+                                  ? 'bg-green-100 text-green-800 border border-green-300' 
+                                  : option === review.userAnswer && !review.isCorrect
+                                  ? 'bg-red-100 text-red-800 border border-red-300'
+                                  : 'bg-gray-50 text-gray-700'
+                              }`}
+                            >
+                              {option}
+                            </div>
+                          ))}
                         </div>
                       )}
-
-                      {question.firstPrinciplesExplanation && (
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                         <div>
-                          <div className="text-sm font-medium text-gray-600 mb-1">First Principles:</div>
-                          <div className="text-gray-700 text-sm bg-blue-50 p-2 rounded">
-                            {question.firstPrinciplesExplanation}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )) || (
-                  <div className="text-center text-gray-500 py-8">
-                    <Brain className="h-12 w-12 mx-auto mb-2 text-gray-300" />
-                    <p>Question review data not available for this assessment.</p>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="topics" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Grammar Topic Performance</CardTitle>
-              <CardDescription>Detailed breakdown of your performance across grammar categories</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {results.grammarBreakdown ? (
-                  Object.entries(results.grammarBreakdown).map(([topic, performance]) => (
-                    <div key={topic} className="p-4 border rounded-lg">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="font-medium text-lg">{topic}</h3>
-                        <div className="flex items-center space-x-2">
-                          <Badge className={
-                            performance.accuracy >= 0.8 ? 'bg-green-100 text-green-800' :
-                            performance.accuracy >= 0.6 ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-red-100 text-red-800'
-                          }>
-                            {Math.round(performance.accuracy * 100)}%
-                          </Badge>
-                          <span className="text-sm text-gray-500">
-                            {performance.correct}/{performance.total}
+                          <span className="font-medium">Your answer: </span>
+                          <span className={review.isCorrect ? 'text-green-600' : 'text-red-600'}>
+                            {review.userAnswer}
                           </span>
                         </div>
+                        <div>
+                          <span className="font-medium">Correct answer: </span>
+                          <span className="text-green-600">{review.correctAnswer}</span>
+                        </div>
                       </div>
-                      <Progress value={performance.accuracy * 100} className="h-3" />
-                      <div className="mt-2 text-sm text-gray-600">
-                        {performance.accuracy >= 0.8 ? 'Excellent mastery!' :
-                         performance.accuracy >= 0.6 ? 'Good understanding, room for improvement' :
-                         'Needs focused practice'}
-                      </div>
+                      
+                      {review.explanation && (
+                        <div className="bg-blue-50 p-3 rounded-lg">
+                          <p className="text-sm text-blue-900">
+                            <strong>Explanation:</strong> {review.explanation}
+                          </p>
+                        </div>
+                      )}
                     </div>
-                  ))
-                ) : (
-                  <div className="text-center text-gray-500 py-8">
-                    <Target className="h-12 w-12 mx-auto mb-2 text-gray-300" />
-                    <p>Topic performance data not available for this assessment.</p>
                   </div>
-                )}
+                ))}
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="practice" className="mt-6">
+        <TabsContent value="drills" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Recommended Practice Plan</CardTitle>
-              <CardDescription>Personalized recommendations based on your performance</CardDescription>
+              <CardTitle className="flex items-center space-x-2">
+                <Target className="h-5 w-5 text-purple-600" />
+                <span>Recommended Practice Drills</span>
+              </CardTitle>
+              <CardDescription>
+                Personalized practice activities based on your weak areas
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {practicedrills.length > 0 ? (
+                <div className="space-y-4">
+                  {practicedrills.map((drill) => (
+                    <div key={drill.id} className="border rounded-lg p-4">
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <h4 className="font-medium text-gray-900">{drill.title}</h4>
+                          <p className="text-sm text-gray-600">{drill.description}</p>
+                        </div>
+                        <Badge variant={getPriorityColor(drill.priority)}>
+                          {drill.priority} priority
+                        </Badge>
+                      </div>
+                      
+                      <div className="flex items-center space-x-4 text-sm text-gray-600">
+                        <span>📚 Topic: {drill.topic}</span>
+                        <span>⏱️ {drill.estimatedTime} min</span>
+                        <span>📝 {drill.exercises} exercises</span>
+                        <Badge variant="outline">{drill.level}</Badge>
+                      </div>
+                      
+                      <Button className="mt-3" variant="outline" size="sm">
+                        Start Practice
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500 text-center py-8">
+                  Excellent work! You don't have any specific weak areas that need immediate attention.
+                  Continue practicing at your current level to maintain your skills.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="progress" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <TrendingUp className="h-5 w-5 text-green-600" />
+                <span>Your Learning Path</span>
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {weakTopics.length > 0 ? (
-                  weakTopics.map((topic, index) => {
-                    const recommendation = getPracticeRecommendation(topic.topic, topic.accuracy);
-                    return (
-                      <div key={index} className="p-4 border rounded-lg bg-gradient-to-r from-blue-50 to-purple-50">
-                        <div className="flex items-center justify-between mb-3">
-                          <div>
-                            <h3 className="font-medium text-lg">{topic.topic}</h3>
-                            <div className="text-sm text-gray-600">
-                              Current accuracy: {Math.round(topic.accuracy * 100)}%
-                            </div>
-                          </div>
-                          <Badge variant="outline" className="bg-white">
-                            Priority: {topic.accuracy < 0.3 ? 'High' : topic.accuracy < 0.5 ? 'Medium' : 'Low'}
-                          </Badge>
-                        </div>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                          <div className="text-center p-3 bg-white rounded">
-                            <div className="font-medium text-blue-600">{recommendation.level}</div>
-                            <div className="text-xs text-gray-500">Recommended Level</div>
-                          </div>
-                          <div className="text-center p-3 bg-white rounded">
-                            <div className="font-medium text-purple-600">{recommendation.sessions}</div>
-                            <div className="text-xs text-gray-500">Practice Sessions</div>
-                          </div>
-                          <div className="text-center p-3 bg-white rounded">
-                            <div className="font-medium text-green-600">15-20 min</div>
-                            <div className="text-xs text-gray-500">Per Session</div>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between">
-                          <div className="text-sm text-gray-600">
-                            🎯 Target: Improve to 80%+ accuracy
-                          </div>
-                          <Button variant="outline" className="text-sm" disabled>
-                            Continue to Smart Practice →
-                            <span className="ml-1 text-xs">(Coming Soon)</span>
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="text-center text-gray-500 py-8">
-                    <CheckCircle className="h-12 w-12 mx-auto mb-2 text-gray-300" />
-                    <div className="text-lg font-medium mb-2">Excellent Performance!</div>
-                    <p>You're performing well across all topics. Consider taking a higher-level assessment to challenge yourself further.</p>
-                    <Button variant="outline" className="mt-4" onClick={onRetakeTest}>
-                      Take Advanced Assessment
-                    </Button>
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <h4 className="font-medium text-blue-900 mb-2">Immediate Next Steps:</h4>
+                  <ul className="space-y-1">
+                    {results.detailedFeedback.nextSteps.map((step, index) => (
+                      <li key={index} className="text-sm text-blue-800">
+                        • {step}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                
+                {weakAreas.length > 0 && (
+                  <div className="bg-orange-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-orange-900 mb-2">Weekly Focus Areas:</h4>
+                    <ul className="space-y-1">
+                      {weakAreas.slice(0, 3).map((weak, index) => (
+                        <li key={index} className="text-sm text-orange-800">
+                          • Dedicate 15-20 minutes daily to {weak.topic.toLowerCase()} practice
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 )}
+                
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <h4 className="font-medium text-green-900 mb-2">Maintain Your Strengths:</h4>
+                  <ul className="space-y-1">
+                    {strengthAreas.slice(0, 3).map((strength, index) => (
+                      <li key={index} className="text-sm text-green-800">
+                        • Keep practicing {strength.topic.toLowerCase()} to maintain your {Math.round(strength.accuracy * 100)}% accuracy
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
 
-      {/* Action Buttons */}
-      <div className="flex flex-col sm:flex-row gap-4 justify-center">
-        <Button onClick={onRetakeTest} variant="outline" className="flex items-center space-x-2">
-          <Clock className="h-4 w-4" />
-          <span>Retake Assessment</span>
+      <div className="flex justify-center">
+        <Button onClick={onRestart} variant="outline" size="lg">
+          Take Another Assessment
         </Button>
-        {onContinuePractice && (
-          <Button onClick={onContinuePractice} className="flex items-center space-x-2">
-            <BookOpen className="h-4 w-4" />
-            <span>Continue Learning</span>
-          </Button>
-        )}
       </div>
     </div>
   );

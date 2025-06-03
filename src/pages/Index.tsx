@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MessageCircle, CheckCircle, Target, BookOpen, TrendingUp } from 'lucide-react';
 import ChatInterface from '@/components/ChatInterface';
-import PlacementTest from '@/components/PlacementTest';
+import EnhancedPlacementTest from '@/components/EnhancedPlacementTest';
 import GrammarPractice from '@/components/GrammarPractice';
 import AuthPage from '@/components/AuthPage';
 import { Header } from '@/components/Header';
@@ -67,7 +67,7 @@ const AppContent = () => {
           </TabsContent>
 
           <TabsContent value="assessment" className="mt-0">
-            <PlacementTest />
+            <EnhancedPlacementTest />
           </TabsContent>
 
           <TabsContent value="chat" className="mt-0">
